@@ -8,8 +8,6 @@ import win32event
 import win32service
 import win32serviceutil
 
-from .server import create_server
-
 
 class CreatorHubService(win32serviceutil.ServiceFramework):
     _svc_name_ = "CreatorHubService"
@@ -29,6 +27,10 @@ class CreatorHubService(win32serviceutil.ServiceFramework):
 
     def SvcDoRun(self):
         servicemanager.LogInfoMsg("CreatorHub service starting")
+        # Importing the web runtime is intentionally deferred until SCM starts
+        # the service. Commands such as install/update/remove must remain usable
+        # even while installer assets are still being repaired.
+        from .server import create_server
         self.server = create_server()
         asyncio.run(self.server.serve())
         servicemanager.LogInfoMsg("CreatorHub service stopped")

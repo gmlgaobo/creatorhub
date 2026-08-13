@@ -1,5 +1,5 @@
 #define MyAppName "CreatorHub"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "gmlgaobo"
 #define MyAppExeName "CreatorHubTray.exe"
 
@@ -25,6 +25,7 @@ RestartApplications=no
 
 [Files]
 Source: "..\dist\CreatorHub\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\config.example.yaml"; DestDir: "{app}\_internal"; Flags: ignoreversion
 Source: "..\packaging\vendor\node\*"; DestDir: "{app}\vendor\node"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\node_modules\crypto-js\*"; DestDir: "{app}\node_modules\crypto-js"; Flags: ignoreversion recursesubdirs createallsubdirs
 

@@ -28,7 +28,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build-windows.ps1
 
 脚本使用 PyInstaller `onedir` 构建三个程序，下载官方便携 Node 运行时，然后由 Inno Setup 生成：
 
-`release\CreatorHub-Setup-1.0.0-x64.exe`
+`release\CreatorHub-Setup-1.0.1-x64.exe`
 
 若公众号仓库不在默认同级路径，可预先设置 `CREATORHUB_WECHAT_OA_PATH`。
 
@@ -38,4 +38,4 @@ powershell -ExecutionPolicy Bypass -File packaging\build-windows.ps1
 
 “内部版本更新”页面可保存私有 GitHub Release 的只读 Token。Token 进入 Windows 凭据管理器，不写入配置文件；更新安装包经大小和 GitHub SHA-256 摘要校验后，由桌面托盘显示安装确认窗口。
 
-当前 1.0.0 为内部测试包，尚未购买代码签名证书，因此 Windows 会显示“未知发布者”。正式分发前应加入 Authenticode 签名。
+当前 1.0.1 为内部测试包，尚未购买代码签名证书，因此 Windows 会显示“未知发布者”。正式分发前应加入 Authenticode 签名。

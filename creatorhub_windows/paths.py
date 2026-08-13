@@ -29,10 +29,17 @@ def runtime_paths() -> RuntimePaths:
         "CREATORHUB_PROGRAM_DATA",
         str(Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "CreatorHub"),
     )).resolve()
-    local_root = Path(os.getenv(
-        "CREATORHUB_LOCAL_DATA",
-        str(Path(os.environ.get("LOCALAPPDATA", program_root / "operator")) / "CreatorHub"),
-    )).resolve()
+    configured_local = os.getenv("CREATORHUB_LOCAL_DATA", "").strip()
+    if not configured_local:
+        try:
+            operator = json.loads((program_root / "operator.json").read_text(
+                encoding="utf-8"))
+            configured_local = str(operator.get("local_data") or "").strip()
+        except (OSError, ValueError):
+            configured_local = ""
+    local_root = Path(configured_local or str(
+        Path(os.environ.get("LOCALAPPDATA", program_root / "operator")) /
+        "CreatorHub")).resolve()
     return RuntimePaths(
         program_data=program_root,
         local_data=local_root,
@@ -57,6 +64,11 @@ def ensure_directories(paths: RuntimePaths) -> None:
 
 
 def register_operator(paths: RuntimePaths) -> None:
+    # A LocalSystem service must not replace the desktop operator registered by
+    # the installer or tray process.
+    if paths.operator.exists() and os.environ.get("USERNAME", "").upper() in {
+            "SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE"}:
+        return
     payload = {
         "username": os.environ.get("USERNAME", ""),
         "local_data": str(paths.local_data),
@@ -66,8 +78,14 @@ def register_operator(paths: RuntimePaths) -> None:
 
 
 def ensure_config(paths: RuntimePaths, template: Path) -> None:
-    source = paths.config if paths.config.exists() else template
-    raw = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    if paths.config.exists():
+        raw = yaml.safe_load(paths.config.read_text(encoding="utf-8")) or {}
+    elif template.is_file():
+        raw = yaml.safe_load(template.read_text(encoding="utf-8")) or {}
+    else:
+        # Dataclass defaults in app.config provide the remaining values. This
+        # keeps repair/service registration functional after a partial install.
+        raw = {}
     raw.setdefault("server", {})["host"] = "0.0.0.0"
     raw["server"]["port"] = LAN_PORT
     raw.setdefault("storage", {})["db_path"] = str(paths.database)

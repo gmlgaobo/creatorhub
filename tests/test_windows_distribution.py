@@ -15,6 +15,7 @@ from creatorhub_windows.agent_proxy import is_visible_browser_route
 from creatorhub_windows.certificates import ensure_certificate
 from creatorhub_windows.migration import migrate_from
 from creatorhub_windows.paths import RuntimePaths, ensure_directories
+from creatorhub_windows.paths import ensure_config
 from creatorhub_windows.security import _derive, _session_token, _valid_session
 from creatorhub_windows.updates import stage_latest_installer
 
@@ -106,6 +107,21 @@ class WindowsDistributionTests(unittest.TestCase):
                          "server.py").read_text(encoding="utf-8")
         self.assertIn("log_config=None", agent_source)
         self.assertIn("log_config=None", server_source)
+
+    def test_partial_install_can_generate_config_without_template(self):
+        with tempfile.TemporaryDirectory() as value:
+            paths = paths_for(Path(value))
+            ensure_directories(paths)
+            ensure_config(paths, Path(value) / "missing-template.yaml")
+            config = paths.config.read_text(encoding="utf-8")
+            self.assertIn("port: 8443", config)
+            self.assertIn(str(paths.database), config)
+
+    def test_service_commands_do_not_import_web_runtime(self):
+        source = (Path(__file__).parents[1] / "creatorhub_windows" /
+                  "service.py").read_text(encoding="utf-8")
+        prefix = source.split("class CreatorHubService", 1)[0]
+        self.assertNotIn("from .server import", prefix)
 
 
 if __name__ == "__main__":
