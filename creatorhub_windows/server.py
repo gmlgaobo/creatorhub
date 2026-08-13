@@ -118,7 +118,7 @@ def create_server() -> uvicorn.Server:
     config = uvicorn.Config(
         app, host="0.0.0.0", port=LAN_PORT,
         ssl_certfile=str(cert), ssl_keyfile=str(key),
-        log_level="info", access_log=True,
+        log_level="info", access_log=True, log_config=None,
     )
     return uvicorn.Server(config)
 

@@ -99,6 +99,14 @@ class WindowsDistributionTests(unittest.TestCase):
             result = stage_latest_installer(Path(value))
             self.assertEqual(Path(result["path"]).read_bytes(), payload)
 
+    def test_windowed_servers_do_not_require_console_streams(self):
+        agent_source = (Path(__file__).parents[1] / "creatorhub_windows" /
+                        "agent.py").read_text(encoding="utf-8")
+        server_source = (Path(__file__).parents[1] / "creatorhub_windows" /
+                         "server.py").read_text(encoding="utf-8")
+        self.assertIn("log_config=None", agent_source)
+        self.assertIn("log_config=None", server_source)
+
 
 if __name__ == "__main__":
     unittest.main()

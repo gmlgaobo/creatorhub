@@ -55,7 +55,7 @@ def create_agent_server() -> uvicorn.Server:
 
     return uvicorn.Server(uvicorn.Config(
         app, host=AGENT_HOST, port=AGENT_PORT,
-        log_level="warning", access_log=False,
+        log_level="warning", access_log=False, log_config=None,
     ))
 
 
