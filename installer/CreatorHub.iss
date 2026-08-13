@@ -53,6 +53,19 @@ Filename: "{app}\CreatorHubService.exe"; Parameters: "remove"; Flags: runhidden 
 Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""CreatorHub HTTPS"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveFirewall"
 
 [Code]
+var
+  ServiceRecoverySuspended: Boolean;
+  InstallFinished: Boolean;
+
+procedure RestoreServiceRecovery();
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\sc.exe'),
+    'failure CreatorHubService reset= 86400 actions= restart/5000/restart/15000/none/0',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 function ChromeInstalled(): Boolean;
 var
   Value: String;
@@ -85,6 +98,12 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+  { A forced stop is otherwise interpreted as a crash and the configured
+    recovery policy restarts the service while files are still being copied. }
+  if Exec(ExpandConstant('{sys}\sc.exe'),
+    'failure CreatorHubService reset= 0 actions= none/0', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    ServiceRecoverySuspended := True;
   { Never ask the old frozen Python executable to stop itself: a damaged or
     partial old install may fail during import before it reaches SCM commands. }
   Exec(ExpandConstant('{sys}\sc.exe'), 'stop CreatorHubService', '', SW_HIDE,
@@ -99,4 +118,22 @@ begin
     '/IM CreatorHubService.exe /T /F', '', SW_HIDE,
     ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssDone then
+    InstallFinished := True;
+end;
+
+procedure DeinitializeSetup();
+var
+  ResultCode: Integer;
+begin
+  if ServiceRecoverySuspended and not InstallFinished then
+  begin
+    RestoreServiceRecovery();
+    Exec(ExpandConstant('{sys}\sc.exe'), 'start CreatorHubService', '', SW_HIDE,
+      ewWaitUntilTerminated, ResultCode);
+  end;
 end;

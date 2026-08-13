@@ -144,8 +144,11 @@ class WindowsDistributionTests(unittest.TestCase):
                   "CreatorHub.iss").read_text(encoding="utf-8")
         prepare = source.split("function PrepareToInstall", 1)[1]
         self.assertIn("sc.exe'), 'stop CreatorHubService'", prepare)
+        self.assertIn(
+            "failure CreatorHubService reset= 0 actions= none/0", prepare)
         self.assertIn("/IM CreatorHubService.exe /T /F", prepare)
         self.assertNotIn("CreatorHubService.exe'), 'stop'", prepare)
+        self.assertIn("procedure DeinitializeSetup", prepare)
 
 
 if __name__ == "__main__":
