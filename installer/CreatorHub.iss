@@ -85,7 +85,18 @@ var
   ResultCode: Integer;
 begin
   Result := '';
-  if FileExists(ExpandConstant('{app}\CreatorHubService.exe')) then
-    Exec(ExpandConstant('{app}\CreatorHubService.exe'), 'stop', '', SW_HIDE,
-      ewWaitUntilTerminated, ResultCode);
+  { Never ask the old frozen Python executable to stop itself: a damaged or
+    partial old install may fail during import before it reaches SCM commands. }
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop CreatorHubService', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode);
+  Sleep(5000);
+  { Close only CreatorHub-owned processes and their browser-driver children so
+    the installer can atomically replace its onedir runtime. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'),
+    '/IM CreatorHubTray.exe /T /F', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'),
+    '/IM CreatorHubService.exe /T /F', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode);
+  Sleep(1500);
 end;

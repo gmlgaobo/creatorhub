@@ -123,6 +123,14 @@ class WindowsDistributionTests(unittest.TestCase):
         prefix = source.split("class CreatorHubService", 1)[0]
         self.assertNotIn("from .server import", prefix)
 
+    def test_installer_stops_broken_old_service_without_importing_it(self):
+        source = (Path(__file__).parents[1] / "installer" /
+                  "CreatorHub.iss").read_text(encoding="utf-8")
+        prepare = source.split("function PrepareToInstall", 1)[1]
+        self.assertIn("sc.exe'), 'stop CreatorHubService'", prepare)
+        self.assertIn("/IM CreatorHubService.exe /T /F", prepare)
+        self.assertNotIn("CreatorHubService.exe'), 'stop'", prepare)
+
 
 if __name__ == "__main__":
     unittest.main()
