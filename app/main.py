@@ -193,17 +193,22 @@ async def lifespan(app: FastAPI):
         native_write_proxy_max_age_seconds=cfg.engine.native_write_proxy_max_age_seconds,
         browser_exit_probe_url=cfg.engine.browser_exit_probe_url)
     await browser.start()
-    engine = MonitorEngine(cfg, browser)
-    startup_now = datetime.utcnow()
-    pruned_risk_events = engine._prune_risk_events_if_due(startup_now)
-    if pruned_risk_events:
-        print(f"[startup] 已清理 {pruned_risk_events} 条过期风控事件")
-    recovered = engine.recover_interrupted_tasks()
-    if recovered:
-        print(f"[startup] 已恢复 {recovered} 条中断的写任务")
-    engine.start()
-    from .engine.im_receiver import ImReceiverManager
-    im_receiver = ImReceiverManager(browser)
+    # The Windows desktop agent owns visible Chrome windows, while the service
+    # owns schedulers and background receivers.  Both use the same external DB,
+    # so starting the engine twice would duplicate scheduled work.
+    desktop_agent = os.getenv("CREATORHUB_DESKTOP_AGENT", "") == "1"
+    if not desktop_agent:
+        engine = MonitorEngine(cfg, browser)
+        startup_now = datetime.utcnow()
+        pruned_risk_events = engine._prune_risk_events_if_due(startup_now)
+        if pruned_risk_events:
+            print(f"[startup] 已清理 {pruned_risk_events} 条过期风控事件")
+        recovered = engine.recover_interrupted_tasks()
+        if recovered:
+            print(f"[startup] 已恢复 {recovered} 条中断的写任务")
+        engine.start()
+        from .engine.im_receiver import ImReceiverManager
+        im_receiver = ImReceiverManager(browser)
     yield
     if im_receiver:
         await im_receiver.stop_all()

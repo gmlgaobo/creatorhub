@@ -12,6 +12,10 @@ env/
 # Node (xhs publish signing deps)
 node_modules/
 _site/
+build/
+dist/
+release/
+packaging/vendor/
 
 # IDE
 .idea/
