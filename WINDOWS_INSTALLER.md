@@ -28,7 +28,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build-windows.ps1
 
 脚本使用 PyInstaller `onedir` 构建三个程序，下载官方便携 Node 运行时，然后由 Inno Setup 生成：
 
-`release\CreatorHub-Setup-1.0.1-x64.exe`
+`release\CreatorHub-Setup-1.0.2-x64.exe`
 
 若公众号仓库不在默认同级路径，可预先设置 `CREATORHUB_WECHAT_OA_PATH`。
 
@@ -38,4 +38,11 @@ powershell -ExecutionPolicy Bypass -File packaging\build-windows.ps1
 
 “内部版本更新”页面可保存私有 GitHub Release 的只读 Token。Token 进入 Windows 凭据管理器，不写入配置文件；更新安装包经大小和 GitHub SHA-256 摘要校验后，由桌面托盘显示安装确认窗口。
 
-当前 1.0.1 为内部测试包，尚未购买代码签名证书，因此 Windows 会显示“未知发布者”。正式分发前应加入 Authenticode 签名。
+当前 1.0.2 为内部测试包，尚未购买代码签名证书，因此 Windows 会显示“未知发布者”。正式分发前应加入 Authenticode 签名。
+
+## 局域网访问与桌面窗口
+
+- 其他电脑应访问 `https://安装主机局域网IP:8443`，不能使用只属于各自电脑的 `127.0.0.1:8000`。
+- 首次管理员初始化必须在安装主机完成。客户端需要信任安装主机生成的本地证书，否则浏览器会显示证书警告。
+- 安装程序只开放 Windows“专用网络”的 8443 入站规则；网络类别为“公用网络”时，局域网连接会被防火墙阻止，应先把可信局域网调整为“专用网络”。
+- 网页、官方 API、草稿和素材数据可以从其他电脑操作；扫码、重新登录、打开公众号后台和真实后台健康检测始终由安装主机的托盘程序执行，窗口只显示在安装主机。

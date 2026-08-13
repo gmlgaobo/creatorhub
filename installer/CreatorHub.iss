@@ -1,5 +1,5 @@
 #define MyAppName "CreatorHub"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "gmlgaobo"
 #define MyAppExeName "CreatorHubTray.exe"
 

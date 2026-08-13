@@ -1,17 +1,19 @@
 import os
 import hashlib
 import io
+import json
 import sqlite3
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from cryptography.fernet import Fernet
 
 from creatorhub_windows.backup import create_backup
-from creatorhub_windows.agent_proxy import is_visible_browser_route
+from creatorhub_windows.agent_proxy import _forward_sync, is_visible_browser_route
 from creatorhub_windows.certificates import ensure_certificate
 from creatorhub_windows.migration import migrate_from
 from creatorhub_windows.paths import RuntimePaths, ensure_directories
@@ -84,6 +86,20 @@ class WindowsDistributionTests(unittest.TestCase):
         self.assertTrue(is_visible_browser_route(
             "/api/wechat-oa/accounts/9/browser-health"))
         self.assertFalse(is_visible_browser_route("/api/works"))
+
+    def test_remote_desktop_agent_failure_explains_execution_host(self):
+        request = SimpleNamespace(
+            url=SimpleNamespace(path="/api/login/wechat-oa/start", query=""),
+            headers={}, method="POST",
+        )
+        with patch("creatorhub_windows.agent_proxy.urllib.request.urlopen",
+                   side_effect=OSError("offline")):
+            response = _forward_sync(
+                request, b"", "token", requested_from_remote=True)
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("安装主机", payload["detail"])
+        self.assertIn("不会在当前访问电脑弹出", payload["detail"])
 
     def test_update_installer_is_size_and_digest_checked(self):
         payload = b"fixture-installer"
