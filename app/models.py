@@ -31,6 +31,28 @@ class DouyinAccount(SQLModel, table=True):
     timezone_id: str = "Asia/Shanghai"
     locale: str = "zh-CN"
     fp_seed: str = ""             # 指纹种子(canvas/webgl/navigator 据此确定性生成,保证每次一致)
+    fp_source_ip: str = ""        # 最近一次生成指纹时使用的真实出口 IP
+    fp_country: str = ""          # IP 对应的 ISO2 国家/地区
+    fp_region: str = ""
+    fp_city: str = ""
+    fp_generated_at: Optional[datetime] = None
+    # fingerprint-chromium 官方命令行可覆盖项；空/0 表示继续按种子或内核默认生成。
+    fp_platform: str = ""
+    fp_platform_version: str = ""
+    fp_brand: str = ""
+    fp_brand_version: str = ""
+    fp_hardware_concurrency: int = 0
+    fp_gpu_vendor: str = ""
+    fp_gpu_renderer: str = ""
+    fp_accept_languages: str = ""
+    fp_disable_spoofing: str = ""  # comma list: font,audio,canvas,clientrects,gpu
+    fp_language_mode: str = "auto"       # auto | custom
+    fp_timezone_mode: str = "auto"       # auto | custom
+    fp_viewport_mode: str = "auto"       # auto | custom
+    fp_location_mode: str = "auto"       # auto | custom
+    fp_geolocation_permission: str = "allow"  # ask | allow | deny
+    fp_webrtc_mode: str = "conceal"      # conceal | allow
+    fp_extra_args: str = ""               # validated additional Chromium args
     geo_lat: float = 0.0          # geolocation 伪造纬度(代理体检时按出口 IP 归属地写入;0=按种子派生兜底)
     geo_lon: float = 0.0          # geolocation 伪造经度
     proxy_status: str = "unknown"  # unknown | ok | bad
@@ -45,6 +67,10 @@ class DouyinAccount(SQLModel, table=True):
     write_paused_until: Optional[datetime] = None  # 平台风控后暂停自动写操作
     write_pause_reason: str = ""                    # 最近一次暂停原因
     identity_mode: str = "legacy"                  # legacy=保留存量画像 | native=浏览器原生画像
+    # default=跟随全局；local=现有 Patchright/CDP；fingerprint_chromium=开源内核。
+    browser_backend: str = "default"
+    # fingerprint_chromium 下绑定的具体内核运行时；空=跟随默认内核。
+    browser_runtime_id: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -68,6 +94,15 @@ class MonitorTarget(SQLModel, table=True):
     video_quality: str = ""                 # 画质偏好(空=用全局默认)
     download_enabled: bool = True           # 新作品是否自动下载；关闭时仍保留作品记录
     media_filter: str = "all"               # all | video | images
+    # 作品监控策略。0 表示使用平台默认值（小红书 6/12，其他平台 12/不限）。
+    max_scrolls: int = 0                    # 单轮页面下滑深度
+    max_items_per_scan: int = 0             # 单轮详情/入库上限
+    record_media_filter: str = "all"        # all | video | images，仅控制是否入库
+    min_like_count: int = 0
+    min_comment_count: int = 0
+    recent_days: int = 0                    # 0=不限发布时间
+    include_keywords: str = "[]"            # JSON 字符串数组，任一命中
+    exclude_keywords: str = "[]"            # JSON 字符串数组，任一命中即排除
     account_id: Optional[int] = None       # 用哪个登录账号的 Cookie 抓取
     last_scan_at: Optional[datetime] = None
     last_error: str = ""
@@ -88,6 +123,25 @@ class ProxyPool(SQLModel, table=True):
     region: str = ""
     city: str = ""
     isp: str = ""
+    last_checked_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class BrowserRuntime(SQLModel, table=True):
+    """可由账号固定选择的本地 Chromium 内核运行时。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    runtime_id: str = Field(default="", index=True, unique=True)
+    name: str = ""
+    backend: str = "fingerprint_chromium"
+    version: str = ""
+    executable_path: str = ""
+    platform: str = "auto"
+    allow_headless: bool = False
+    enabled: bool = True
+    is_default: bool = False
+    status: str = "unknown"       # unknown | ok | bad
+    last_error: str = ""
+    file_sha256: str = ""
     last_checked_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -125,7 +179,18 @@ class RiskEvent(SQLModel, table=True):
     operation_kind: str = Field(default="read_light", index=True)
     outcome: str = Field(default="success", index=True)
     signal: str = ""
+    detail: str = ""              # 脱敏后的原因摘要；不保存响应正文或账号凭据
     occurred_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class RiskAdminAudit(SQLModel, table=True):
+    """Local administrative changes to risk policy and account state."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    action: str = Field(index=True)
+    account_id: Optional[int] = Field(default=None, index=True)
+    actor: str = "local-ui"
+    detail: str = "{}"             # JSON diff/reason; never contains credentials
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
 class NotificationChannel(SQLModel, table=True):
@@ -204,6 +269,11 @@ class PublishTask(SQLModel, table=True):
     status: str = "pending"        # pending | publishing | uncertain | done | failed | canceled
     result_url: str = ""           # 发布成功后的笔记链接(能取到则填)
     error: str = ""
+    blocked_reason: str = ""
+    blocked_signal: str = ""
+    blocked_operation: str = ""
+    blocked_at: Optional[datetime] = None
+    next_allowed_at: Optional[datetime] = Field(default=None, index=True)
     source_platform: str = ""      # 来源(如 douyin),跨平台转发时填
     source_content_id: Optional[int] = None            # 来源作品记录 id
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -220,6 +290,7 @@ class CommentRecord(SQLModel, table=True):
     comment_id: str = Field(index=True)        # 抖音 cid
     text: str = ""
     user_nickname: str = ""
+    user_sec_uid: str = ""                    # 抖音评论用户 sec_uid
     like_count: int = 0
     create_time: int = 0                       # 评论时间(unix 秒)
     reply_to: str = ""                         # 上级评论 cid(子评论时)
@@ -233,6 +304,13 @@ class KeywordCollectionJob(SQLModel, table=True):
     account_id: int = Field(index=True)
     keywords: str = "[]"                 # JSON 字符串数组
     max_contents_per_keyword: int = 20
+    max_pages_per_keyword: int = 12       # 抖音搜索为滚动加载；页面上以“深度页”表达
+    stagnant_pages: int = 3               # 连续多少次滚动无新结果后提前停止
+    search_sort: str = "general"          # general | latest | most_liked
+    publish_time: str = "all"             # all | day | week | half_year
+    content_type: str = "all"             # all | video | images
+    min_likes: int = 0
+    min_comments: int = 0
     max_comments_per_content: int = 20
     include_replies: bool = False
     download_media: bool = False
@@ -245,6 +323,11 @@ class KeywordCollectionJob(SQLModel, table=True):
     comment_count: int = 0
     error_count: int = 0
     error: str = ""
+    blocked_reason: str = ""
+    blocked_signal: str = ""
+    blocked_operation: str = ""
+    blocked_at: Optional[datetime] = None
+    next_allowed_at: Optional[datetime] = Field(default=None, index=True)
     cancel_requested: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     started_at: Optional[datetime] = None
@@ -395,6 +478,11 @@ class CommentTask(SQLModel, table=True):
     status: str = "pending"        # draft | pending | doing | uncertain | done | failed | canceled
     result: str = ""               # 成功后的评论 id / 链接
     error: str = ""
+    blocked_reason: str = ""
+    blocked_signal: str = ""
+    blocked_operation: str = ""
+    blocked_at: Optional[datetime] = None
+    next_allowed_at: Optional[datetime] = Field(default=None, index=True)
     method: str = ""               # 实际走的通道:manual | api | browser
     created_at: datetime = Field(default_factory=datetime.utcnow)
     done_at: Optional[datetime] = None
@@ -490,7 +578,51 @@ class DmMessage(SQLModel, table=True):
     text: str = ""
     create_time: int = 0
     raw_json: str = ""
+    # Empty means the message has not participated in auto-reply evaluation.
+    # ``baseline`` prevents replying to historical mail when automation starts.
+    auto_reply_state: str = Field(default="", index=True)
+    auto_reply_rule_id: Optional[int] = Field(default=None, index=True)
+    auto_reply_task_id: Optional[int] = Field(default=None, index=True)
+    auto_reply_processed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DmAutoReplyRule(SQLModel, table=True):
+    """Per-account private-message reply rule."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    platform: str = Field(default="xhs", index=True)
+    account_id: int = Field(index=True)
+    name: str = "自动回复"
+    enabled: bool = True
+    match_mode: str = "keywords"       # all | keywords
+    keywords: str = "[]"               # JSON array; any term matches
+    exclude_keywords: str = "[]"       # JSON array; any term excludes
+    reply_templates: str = "[]"        # JSON array
+    review_before_send: bool = True
+    min_delay_seconds: int = 75
+    max_delay_seconds: int = 300
+    cooldown_seconds: int = 21600
+    max_message_age_seconds: int = 1800
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DmMonitorState(SQLModel, table=True):
+    """Durable account-wide XHS DM monitoring cursor state.
+
+    The baseline belongs to an account, not to each conversation. Once the
+    account baseline exists, a conversation first seen later is considered a
+    genuinely new conversation and is eligible for rule evaluation.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    platform: str = Field(default="xhs", index=True)
+    account_id: int = Field(index=True)
+    baseline_initialized: bool = False
+    baseline_at: Optional[datetime] = None
+    last_poll_at: Optional[datetime] = None
+    last_push_at: Optional[datetime] = None
+    last_error: str = ""
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class AccountActionTask(SQLModel, table=True):
@@ -504,10 +636,17 @@ class AccountActionTask(SQLModel, table=True):
     target_nick: str = ""             # 展示用
     conv_id: str = ""                 # send_dm:会话 id(可空,用 target_uid 新开)
     content: str = ""                 # send_dm 的文案
+    source_msg_id: str = Field(default="", index=True)  # 自动回复去重键
+    source_rule_id: Optional[int] = Field(default=None, index=True)
     scheduled_at: Optional[datetime] = None
     status: str = "pending"        # draft | pending | doing | done | failed | uncertain | canceled
     result: str = ""
     error: str = ""
+    blocked_reason: str = ""
+    blocked_signal: str = ""
+    blocked_operation: str = ""
+    blocked_at: Optional[datetime] = None
+    next_allowed_at: Optional[datetime] = Field(default=None, index=True)
     method: str = ""               # 实际走的通道:browser
     min_gap_seconds: int = 60      # 同账号两次写操作最小间隔
     created_at: datetime = Field(default_factory=datetime.utcnow)

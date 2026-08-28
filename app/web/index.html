@@ -12,10 +12,11 @@
   :root {
     /* shell sizing */
     --header-h:68px; --sidebar-w:232px; --content-max:1260px;
+    --control-h:40px; --control-bg:#0b0f16; --control-bg-hover:#0f141d;
     /* surfaces */
     --bg:#090b10; --bg-grad:#0d1018;
     --surface:#12161e; --surface-2:#181d27; --surface-3:#202632;
-    --line:#29303c; --line-soft:#1d232d;
+    --line:#2a3341; --line-soft:#1d2530;
     /* text */
     --fg:#e7eaf0; --fg-strong:#f6f8fb; --mut:#8b94a3; --mut-2:#778094;
     /* brand + semantic */
@@ -26,11 +27,12 @@
     --warn:#fbbf24; --warn-soft:rgba(251,191,36,.14);
     --danger:#f87171; --danger-soft:rgba(248,113,113,.14);
     /* shape */
-    --r-xs:6px; --r-sm:8px; --r:12px; --r-lg:16px;
-    --sh-sm:0 1px 2px rgba(0,0,0,.4);
-    --sh:0 1px 2px rgba(0,0,0,.4), 0 12px 28px -16px rgba(0,0,0,.65);
-    --sh-lg:0 2px 4px rgba(0,0,0,.35), 0 24px 48px -20px rgba(0,0,0,.7);
-    --ease:cubic-bezier(.4,0,.2,1);
+    --r-xs:7px; --r-sm:10px; --r:14px; --r-lg:18px;
+    --sh-sm:0 1px 2px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.025);
+    --sh:0 1px 2px rgba(0,0,0,.35), 0 16px 36px -20px rgba(0,0,0,.78), inset 0 1px 0 rgba(255,255,255,.025);
+    --sh-lg:0 3px 8px rgba(0,0,0,.32), 0 28px 64px -24px rgba(0,0,0,.82);
+    --ease:cubic-bezier(.2,.75,.25,1);
+    --ease-out:cubic-bezier(.16,1,.3,1);
     --sans:"Fira Sans",system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
     --mono:"Fira Code",ui-monospace,"SFMono-Regular","JetBrains Mono",Consolas,monospace;
   }
@@ -45,6 +47,7 @@
       radial-gradient(900px 500px at 0% 0%, rgba(56,189,248,.05), transparent 55%),
       var(--bg);
     -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
   ::selection { background:var(--acc-soft); }
 
@@ -54,8 +57,7 @@
   *::-webkit-scrollbar-thumb:hover { background:#2c3340; background-clip:padding-box; }
   html { scrollbar-color:var(--surface-3) transparent; scrollbar-width:thin; }
 
-  /* 原生 checkbox / 日期选择器统一用品牌色 */
-  input[type=checkbox], input[type=radio],
+  /* 原生日期选择器使用品牌色；复选框 / 单选框在表单区域统一重绘 */
   input[type=date], input[type=datetime-local], input[type=time] { accent-color:var(--acc); }
   input[type=date]::-webkit-calendar-picker-indicator,
   input[type=datetime-local]::-webkit-calendar-picker-indicator { filter:invert(.7); cursor:pointer; }
@@ -68,6 +70,7 @@
     padding:0 20px;
     background:rgba(9,11,16,.82); backdrop-filter:blur(18px) saturate(135%);
     border-bottom:1px solid var(--line-soft);
+    box-shadow:0 10px 32px -28px rgba(0,0,0,.85);
   }
   .header-inner {
     width:100%; max-width:1540px; min-height:var(--header-h); margin:0 auto;
@@ -108,6 +111,7 @@
     /* surfaces — 干净白卡 + 暖米底 */
     --bg:#fbf3f1; --bg-grad:#fff;
     --surface:#ffffff; --surface-2:#fdf4f2; --surface-3:#f8e7e2;
+    --control-bg:#fffaf9; --control-bg-hover:#fff6f4;
     --line:#f2ddd7; --line-soft:#f8e9e4;
     /* text — 暖近黑,保证对比度 */
     --fg:#2b2226; --fg-strong:#181113; --mut:#6e5e62; --mut-2:#806f73;
@@ -189,6 +193,7 @@
     transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
   }
   .ncard:hover { transform:translateY(-2px); box-shadow:var(--sh); border-color:var(--acc-ring); }
+  .ncard:has(.ncard-sel:checked) { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-ring), var(--sh); }
   /* 统一封面比例:即便图裂/无封面也占位,避免绝对定位的类型角标压到标题首字 */
   .ncard-cover { display:block; width:100%; aspect-ratio:3/4; background:var(--surface-3); object-fit:cover; }
   .ncard-cover.ph { display:grid; place-items:center; color:var(--mut-2); }
@@ -391,6 +396,16 @@
   .dm-composer { display:flex; gap:8px; padding:12px; border-top:1px solid var(--line-soft); }
   .dm-composer input { flex:1; }
   .dm-composer button { flex:0 0 auto; }
+  .dm-auto { margin:0 0 12px; padding:12px; border:1px solid var(--line-soft); border-radius:var(--r); background:var(--surface-2); }
+  .dm-auto summary { cursor:pointer; font-weight:650; color:var(--fg-strong); }
+  .dm-auto-grid { display:grid; grid-template-columns:1.2fr 1.5fr 1.5fr auto; gap:8px; margin-top:10px; align-items:end; }
+  .dm-auto-grid label { display:flex; flex-direction:column; gap:5px; font-size:11px; color:var(--mut); }
+  .dm-auto-grid input, .dm-auto-grid textarea, .dm-auto-grid select { width:100%; }
+  .dm-auto-rules, .dm-auto-tasks { display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+  .dm-auto-row { display:flex; gap:8px; align-items:center; padding:8px 10px; border:1px solid var(--line-soft); border-radius:8px; background:var(--surface); font-size:12px; }
+  .dm-auto-row .grow { flex:1; min-width:0; }
+  .dm-auto-row .sub { color:var(--mut); font-size:11px; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @media(max-width:900px){ .dm-auto-grid{grid-template-columns:1fr 1fr} }
   @media(max-width:700px){ .dm-wrap{grid-template-columns:1fr} .dm-list{max-height:200px} }
 
   /* ── stats strip ── */
@@ -398,7 +413,7 @@
   .stat {
     position:relative; overflow:hidden;
     display:flex; align-items:center; gap:12px;
-    min-height:92px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); padding:16px 17px;
+    min-height:92px; background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 96%,var(--surface-2)),var(--surface)); border:1px solid var(--line); border-radius:var(--r-lg); padding:16px 17px;
     box-shadow:var(--sh-sm), inset 0 1px 0 rgba(255,255,255,.025);
     transition:border-color .2s var(--ease), transform .2s var(--ease), box-shadow .2s var(--ease);
   }
@@ -423,7 +438,7 @@
   .num, td.num, .tab-badge, .nav-badge, .pv-counter, .stat-v { font-variant-numeric:tabular-nums; }
 
   /* ── layout ── */
-  main { max-width:var(--content-max); margin:0 auto; padding:28px 32px 48px; display:grid; gap:20px; }
+  main { max-width:var(--content-max); margin:0 auto; padding:30px 32px 52px; display:grid; gap:22px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
 
   /* ── tabs ── */
@@ -457,13 +472,13 @@
     position:sticky; top:var(--header-h); flex:0 0 var(--sidebar-w); padding:22px 14px; align-self:flex-start;
     min-height:calc(100vh - var(--header-h)); max-height:calc(100vh - var(--header-h)); overflow-y:auto; scrollbar-width:none;
     border-right:1px solid var(--line-soft);
-    background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 48%,transparent),transparent 76%);
+    background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 58%,transparent),color-mix(in srgb,var(--bg) 78%,transparent) 76%);
   }
   .sidebar::-webkit-scrollbar { display:none; }
   .nav { display:flex; flex-direction:column; gap:5px; }
-  .navitem { position:relative; width:100%; min-height:42px; background:transparent; border:1px solid transparent; color:var(--mut); font-weight:550; font-size:13.5px; padding:10px 12px; border-radius:10px; }
-  .navitem:hover { background:var(--surface-2); color:var(--fg); }
-  .navitem.active { background:var(--acc-soft); color:var(--fg-strong); border-color:var(--acc-ring); }
+  .navitem { position:relative; width:100%; min-height:42px; background:transparent; border:1px solid transparent; color:var(--mut); font-weight:550; font-size:13.5px; padding:10px 12px; border-radius:11px; box-shadow:none; transition:color .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease), transform .12s var(--ease-out); }
+  .navitem:hover { background:var(--surface-2); color:var(--fg); transform:translateX(2px); filter:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.025); }
+  .navitem.active { background:linear-gradient(90deg,var(--acc-soft),color-mix(in srgb,var(--acc-soft) 42%,transparent)); color:var(--fg-strong); border-color:var(--acc-ring); box-shadow:inset 0 1px 0 rgba(255,255,255,.035), 0 10px 24px -22px var(--acc); }
   .navitem.active::before { content:""; position:absolute; left:-1px; top:9px; bottom:9px; width:3px; border-radius:0 3px 3px 0; background:var(--acc); box-shadow:0 0 12px var(--acc-ring); }
   .navitem svg { width:17px; height:17px; }
   .nav-sep { font-size:10.5px; font-weight:600; letter-spacing:.6px; color:var(--mut-2); text-transform:uppercase; padding:14px 12px 5px; }
@@ -491,11 +506,12 @@
 
   /* ── cards ── */
   .card {
-    background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg);
+    background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 98%,var(--surface-2)),var(--surface)); border:1px solid var(--line); border-radius:var(--r-lg);
     padding:20px; box-shadow:var(--sh-sm), inset 0 1px 0 rgba(255,255,255,.025);
-    transition:border-color .2s var(--ease), box-shadow .2s var(--ease);
+    transition:border-color .2s var(--ease), box-shadow .2s var(--ease), transform .2s var(--ease-out);
   }
-  .card:hover { border-color:color-mix(in srgb,var(--line) 55%,var(--acc)); box-shadow:var(--sh); }
+  .card:hover { border-color:color-mix(in srgb,var(--line) 58%,var(--acc)); box-shadow:var(--sh); }
+  .card:focus-within { border-color:color-mix(in srgb,var(--line) 58%,var(--acc)); }
   .card-head { display:flex; align-items:center; gap:11px; margin:0 0 16px; }
   .card-ic { display:grid; place-items:center; width:32px; height:32px; border-radius:9px; background:var(--acc-soft); color:var(--acc); border:1px solid color-mix(in srgb,var(--acc) 22%,transparent); flex:0 0 auto; }
   .card-ic svg { width:17px; height:17px; }
@@ -506,7 +522,7 @@
   /* ── page context / orientation ── */
   .page-context {
     display:flex; align-items:flex-end; gap:18px; min-width:0;
-    padding:2px 2px 18px; border-bottom:1px solid var(--line-soft);
+    padding:2px 2px 20px; border-bottom:1px solid var(--line-soft);
   }
   .page-context-main { min-width:0; flex:1; }
   .page-kicker {
@@ -527,29 +543,32 @@
   #page-title:focus { outline:none; box-shadow:none; }
   .page-desc { margin:5px 0 0; color:var(--mut); font-size:13px; line-height:1.5; }
   [data-panel] { scroll-margin-top:calc(var(--header-h) + 18px); }
+  [data-panel].panel-enter { animation:panelEnter .22s var(--ease-out) both; }
+  @keyframes panelEnter { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 
   /* ── buttons ── */
   button {
     display:inline-flex; align-items:center; justify-content:center; gap:6px;
     background:linear-gradient(180deg,var(--acc-hover),var(--acc)); color:#fff; border:1px solid transparent; border-radius:var(--r-sm);
-    padding:8px 14px; cursor:pointer; font-size:13px; font-weight:550; line-height:1;
+    min-height:36px; padding:7px 14px; cursor:pointer; font-size:13px; font-weight:600; line-height:1;
     touch-action:manipulation;
-    transition:background .18s var(--ease), border-color .18s var(--ease), opacity .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease), transform .06s var(--ease);
+    box-shadow:0 7px 18px -13px var(--acc-ring), inset 0 1px 0 rgba(255,255,255,.18);
+    transition:background .18s var(--ease), border-color .18s var(--ease), opacity .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease), transform .12s var(--ease-out);
   }
   button svg { width:15px; height:15px; }
-  button:hover { filter:brightness(1.07); }
-  button:active { transform:translateY(1px); }
+  button:hover { filter:brightness(1.08); box-shadow:0 10px 24px -14px var(--acc-ring), inset 0 1px 0 rgba(255,255,255,.2); }
+  button:active { transform:scale(.985); }
   /* 仅主操作按钮(无任何变体 class)加柔光,避免泄漏到 ghost/tab/nav/平台切换 */
   button:not([class]):not([data-pf]):not([data-tab]) { box-shadow:0 6px 16px -11px var(--acc-ring), inset 0 1px 0 rgba(255,255,255,.13); }
-  button.ghost { background:var(--surface-2); border-color:var(--line); color:var(--fg); }
-  button.ghost:hover { background:var(--surface-3); border-color:#333a47; }
+  button.ghost { background:linear-gradient(180deg,var(--surface-2),color-mix(in srgb,var(--surface-2) 76%,var(--bg))); border-color:var(--line); color:var(--fg); box-shadow:inset 0 1px 0 rgba(255,255,255,.035); }
+  button.ghost:hover { background:var(--surface-3); border-color:color-mix(in srgb,var(--line) 62%,var(--fg)); }
   button.danger, button.ghost.danger {
     color:var(--danger); background:var(--danger-soft);
     border-color:color-mix(in srgb,var(--danger) 34%,var(--line)); box-shadow:none;
   }
   button.danger:hover, button.ghost.danger:hover { color:#fff; background:var(--danger); border-color:var(--danger); filter:none; }
-  button.sm { padding:5px 10px; font-size:12px; border-radius:var(--r-xs); }
-  button:disabled { opacity:.5; cursor:default; }
+  button.sm { min-height:30px; padding:5px 10px; font-size:12px; border-radius:var(--r-xs); }
+  button:disabled { opacity:.46; cursor:not-allowed; box-shadow:none; }
   button:disabled:hover { filter:none; }
   button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
     outline:none; box-shadow:0 0 0 3px var(--acc-ring); border-radius:var(--r-sm);
@@ -558,16 +577,50 @@
   /* ── inputs ── */
   label.field { display:block; font-size:12px; color:var(--mut); margin-bottom:6px; }
   input, textarea, select {
-    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--fg);
-    border-radius:var(--r-sm); padding:10px 12px; font-size:13px; font-family:inherit;
-    transition:border-color .18s var(--ease), background .18s var(--ease);
+    width:100%; min-height:var(--control-h); background:var(--control-bg); border:1px solid var(--line); color:var(--fg);
+    border-radius:var(--r-sm); padding:9px 12px; font-size:13px; font-family:inherit;
+    box-shadow:inset 0 1px 1px rgba(0,0,0,.16), 0 1px 0 rgba(255,255,255,.018);
+    transition:border-color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease);
   }
   input::placeholder, textarea::placeholder { color:var(--mut-2); }
-  input:hover, textarea:hover, select:hover { border-color:#333a47; }
-  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-ring); }
+  input:hover, textarea:hover, select:hover { border-color:color-mix(in srgb,var(--line) 60%,var(--fg)); background-color:var(--control-bg-hover); }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--acc); background-color:var(--control-bg); box-shadow:0 0 0 3px var(--acc-ring), inset 0 1px 1px rgba(0,0,0,.12); }
   input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color:var(--danger); box-shadow:0 0 0 3px var(--danger-soft); }
-  textarea { resize:vertical; min-height:62px; line-height:1.5; }
+  textarea { resize:vertical; min-height:72px; line-height:1.55; }
   select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238b94a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 9px center; padding-right:30px; cursor:pointer; }
+
+  /* 统一重绘原生选择控件：保留语义、键盘操作与表单提交行为。 */
+  input[type="checkbox"], input[type="radio"] {
+    appearance:none; -webkit-appearance:none; position:relative; display:inline-grid; place-content:center;
+    width:18px!important; min-width:18px; height:18px; min-height:18px; padding:0!important; margin:0;
+    border:1px solid color-mix(in srgb,var(--line) 70%,var(--mut)); border-radius:5px;
+    background:var(--control-bg); box-shadow:inset 0 1px 2px rgba(0,0,0,.2); cursor:pointer;
+    vertical-align:-3px; transition:background .16s var(--ease), border-color .16s var(--ease), box-shadow .16s var(--ease), transform .12s var(--ease-out);
+  }
+  input[type="checkbox"]::before {
+    content:""; width:10px; height:8px; background:#fff;
+    clip-path:polygon(10% 42%,0 58%,40% 100%,100% 18%,84% 4%,38% 72%);
+    transform:scale(.35); opacity:0; transition:transform .16s var(--ease-out), opacity .12s var(--ease);
+  }
+  input[type="checkbox"]:checked, input[type="radio"]:checked {
+    border-color:var(--acc); background:linear-gradient(145deg,var(--acc-hover),var(--acc));
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 24%,transparent), 0 5px 12px -8px var(--acc);
+  }
+  input[type="checkbox"]:checked::before { transform:scale(1); opacity:1; }
+  input[type="checkbox"]:indeterminate { border-color:var(--acc); background:var(--acc); }
+  input[type="checkbox"]:indeterminate::before { width:9px; height:2px; clip-path:none; border-radius:2px; transform:scale(1); opacity:1; }
+  input[type="radio"] { border-radius:50%; }
+  input[type="radio"]::before {
+    content:""; width:8px; height:8px; border-radius:50%; background:#fff;
+    transform:scale(.3); opacity:0; transition:transform .16s var(--ease-out), opacity .12s var(--ease);
+  }
+  input[type="radio"]:checked::before { transform:scale(1); opacity:1; }
+  input[type="checkbox"]:hover, input[type="radio"]:hover { border-color:var(--acc); transform:scale(1.04); }
+  input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline:none; box-shadow:0 0 0 3px var(--acc-ring); }
+  input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity:.42; cursor:not-allowed; transform:none; }
+  input[type="search"] { padding-left:36px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b94a3' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:12px center; }
+  input[type="number"] { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  input:disabled, textarea:disabled, select:disabled { opacity:.48; cursor:not-allowed; background-color:var(--surface-2); }
 
   .row { display:flex; gap:10px; align-items:center; }
   .danmaku-pager {
@@ -631,13 +684,36 @@
   button.input-action:hover { color:var(--fg); background:var(--surface-2); filter:none; }
   button.input-action:active { transform:translateY(-50%); }
   .switch-row {
-    display:flex; align-items:flex-start; gap:11px; padding:12px 13px;
-    color:var(--fg); background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-sm); cursor:pointer;
+    display:flex; align-items:center; gap:11px; padding:11px 12px;
+    color:var(--fg); background:var(--control-bg); border:1px solid var(--line-soft); border-radius:var(--r-sm); cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+    transition:border-color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease);
   }
-  .switch-row:hover { border-color:var(--line); background:var(--surface-2); }
-  .switch-row input { width:17px; height:17px; flex:0 0 auto; margin:2px 0 0; }
+  .switch-row:hover { border-color:color-mix(in srgb,var(--line) 60%,var(--fg)); background:var(--control-bg-hover); }
+  .switch-row:has(input:checked) { border-color:color-mix(in srgb,var(--acc) 24%,var(--line)); background:color-mix(in srgb,var(--acc) 4%,var(--control-bg)); box-shadow:inset 0 1px 0 rgba(255,255,255,.025); }
+  .switch-row:has(input:focus-visible) { border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-ring); }
+  .switch-row input[type="checkbox"] {
+    appearance:none; -webkit-appearance:none; display:block; position:relative;
+    width:38px!important; min-width:38px; height:22px; min-height:22px; flex:0 0 38px; align-self:center;
+    margin:0; padding:0!important; overflow:hidden; line-height:0;
+    border:1px solid color-mix(in srgb,var(--line) 72%,var(--mut)); border-radius:999px;
+    background:var(--surface-3); box-shadow:inset 0 1px 2px rgba(0,0,0,.24);
+    transform:none; transition:background .18s var(--ease), border-color .18s var(--ease), box-shadow .18s var(--ease);
+  }
+  .switch-row input[type="checkbox"]::before {
+    content:""; position:absolute; top:50%; left:2px; width:16px; height:16px;
+    clip-path:none; border:0; border-radius:50%;
+    background:color-mix(in srgb,var(--fg) 78%,var(--surface)); box-shadow:0 1px 3px rgba(0,0,0,.32);
+    transform:translateY(-50%); transform-origin:center; opacity:1;
+    transition:transform .18s var(--ease-out), background .18s var(--ease);
+  }
+  .switch-row input[type="checkbox"]:hover { border-color:color-mix(in srgb,var(--acc) 50%,var(--line)); transform:none; }
+  .switch-row input[type="checkbox"]:checked { border-color:var(--acc); background:var(--acc); box-shadow:inset 0 1px 2px rgba(0,0,0,.12); }
+  .switch-row input[type="checkbox"]:checked::before { left:2px; background:#fff; transform:translate(16px,-50%); opacity:1; }
+  .switch-row input[type="checkbox"]:indeterminate::before { left:2px; width:16px; height:16px; border-radius:50%; transform:translate(8px,-50%); }
+  .switch-row input[type="checkbox"]:focus-visible { box-shadow:inset 0 1px 2px rgba(0,0,0,.12); }
   .switch-copy { display:grid; gap:2px; min-width:0; }
-  .switch-copy b { color:var(--fg); font-size:12.5px; font-weight:600; }
+  .switch-copy b { color:var(--fg); font-size:12.5px; font-weight:650; }
   .switch-copy span { color:var(--mut); font-size:11.5px; line-height:1.4; }
   .option-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
   .option-grid .switch-row { padding:10px 11px; }
@@ -688,27 +764,34 @@
   .cs-native { position:absolute !important; width:1px; height:1px; opacity:0; pointer-events:none; padding:0; margin:0; border:0; }
   .cs-trg {
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;
-    background:var(--bg); border:1px solid var(--line); color:var(--fg);
-    border-radius:var(--r-sm); padding:9px 11px; font-size:13px; font-family:inherit; line-height:1.4;
-    cursor:pointer; text-align:left; transition:border-color .18s var(--ease), box-shadow .18s var(--ease); }
-  .cs-trg:hover { border-color:#333a47; background:var(--bg); }
+    min-height:var(--control-h); background:linear-gradient(180deg,var(--control-bg-hover),var(--control-bg)); border:1px solid var(--line); color:var(--fg);
+    border-radius:var(--r-sm); padding:8px 10px 8px 12px; font-size:13px; font-family:inherit; font-weight:500; line-height:1.4;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.025), 0 1px 1px rgba(0,0,0,.08);
+    cursor:pointer; text-align:left; transition:border-color .18s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease), transform .12s var(--ease-out); }
+  .cs-trg:hover { border-color:color-mix(in srgb,var(--line) 60%,var(--fg)); background:var(--control-bg-hover); box-shadow:inset 0 1px 0 rgba(255,255,255,.035); filter:none; }
+  .cs-trg:active { transform:scale(.995); }
   .cs-native:disabled + .cs-trg { opacity:.48; cursor:not-allowed; }
-  .cs.open .cs-trg { border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-ring); }
+  .cs.open .cs-trg { border-color:var(--acc); background:var(--control-bg); box-shadow:0 0 0 3px var(--acc-ring); }
   .cs-trg .cs-lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .cs-trg.ph .cs-lbl { color:var(--mut-2); }
-  .cs-arr { width:16px; height:16px; flex:0 0 auto; color:var(--mut); transition:transform .2s var(--ease); }
+  .cs-arr { width:16px; height:16px; flex:0 0 auto; padding:2px; color:var(--mut); border-radius:5px; background:var(--surface-2); transition:transform .2s var(--ease-out), color .18s var(--ease), background .18s var(--ease); }
+  .cs-trg:hover .cs-arr, .cs.open .cs-arr { color:var(--acc); background:var(--acc-soft); }
   .cs.open .cs-arr { transform:rotate(180deg); }
   .cs-panel {
-    position:fixed; z-index:300; background:var(--surface); border:1px solid var(--line);
-    border-radius:var(--r-sm); box-shadow:var(--sh); max-height:264px; overflow:auto; padding:5px;
-    transform-origin:top center; animation:csIn .15s var(--ease); }
-  @keyframes csIn { from { opacity:0; transform:translateY(-5px) scale(.985); } to { opacity:1; transform:none; } }
-  .cs-opt { padding:8px 10px; border-radius:8px; font-size:13px; cursor:pointer; white-space:nowrap;
-    color:var(--fg); transition:background .12s var(--ease); }
-  .cs-opt:hover { background:var(--bg); }
+    position:fixed; z-index:300; background:color-mix(in srgb,var(--surface) 96%,transparent); border:1px solid color-mix(in srgb,var(--line) 72%,var(--fg));
+    border-radius:12px; box-shadow:var(--sh-lg); max-height:280px; overflow:auto; padding:6px;
+    backdrop-filter:blur(18px) saturate(135%); transform-origin:top center; animation:csIn .16s var(--ease-out); }
+  @keyframes csIn { from { opacity:0; transform:translateY(-6px) scale(.982); } to { opacity:1; transform:none; } }
+  .cs-opt { position:relative; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:36px; padding:8px 10px; border-radius:8px; font-size:13px; cursor:pointer; white-space:nowrap;
+    color:var(--fg); transition:background .12s var(--ease), color .12s var(--ease); }
+  .cs-opt-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cs-opt::after { content:""; width:9px; height:5px; flex:0 0 auto; border-left:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg) scale(.5); opacity:0; transition:opacity .12s var(--ease), transform .16s var(--ease-out); }
+  .cs-opt:hover { background:var(--surface-2); }
   .cs-opt:focus-visible { outline:none; background:var(--surface-2); box-shadow:inset 0 0 0 2px var(--acc-ring); }
-  .cs-opt.sel { background:var(--bg); color:var(--acc); font-weight:600; }
+  .cs-opt.sel { background:var(--acc-soft); color:var(--acc); font-weight:650; }
+  .cs-opt.sel::after { opacity:1; transform:rotate(-45deg) scale(1); }
   .cs-opt.dis { color:var(--mut-2); cursor:not-allowed; }
+  .cs-opt.dis::after { display:none; }
   .cs-opt.dis:hover { background:transparent; }
 
   /* 自定义 tooltip(替代原生 title) */
@@ -726,17 +809,18 @@
   .dt-native { position:absolute !important; width:1px; height:1px; opacity:0; pointer-events:none; padding:0; margin:0; border:0; }
   .dt-trg {
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;
-    background:var(--bg); border:1px solid var(--line); color:var(--fg);
-    border-radius:var(--r-sm); padding:9px 11px; font-size:13px; font-family:inherit; line-height:1.4;
-    cursor:pointer; text-align:left; transition:border-color .18s var(--ease), box-shadow .18s var(--ease); }
-  .dt-trg:hover { border-color:#333a47; }
+    min-height:var(--control-h); background:linear-gradient(180deg,var(--control-bg-hover),var(--control-bg)); border:1px solid var(--line); color:var(--fg);
+    border-radius:var(--r-sm); padding:8px 10px 8px 12px; font-size:13px; font-family:inherit; font-weight:500; line-height:1.4;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.025); cursor:pointer; text-align:left; transition:border-color .18s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease); }
+  .dt-trg:hover { border-color:color-mix(in srgb,var(--line) 60%,var(--fg)); background:var(--control-bg-hover); filter:none; }
   .dt.open .dt-trg { border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-ring); }
   .dt-trg .dt-lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .dt-trg.ph .dt-lbl { color:var(--mut-2); }
-  .dt-ic { width:16px; height:16px; flex:0 0 auto; color:var(--mut); }
+  .dt-ic { width:16px; height:16px; flex:0 0 auto; color:var(--mut); transition:color .18s var(--ease); }
+  .dt-trg:hover .dt-ic, .dt.open .dt-ic { color:var(--acc); }
   .dt-panel {
-    position:fixed; z-index:300; width:268px; background:var(--surface); border:1px solid var(--line);
-    border-radius:var(--r-md, 12px); box-shadow:var(--sh); padding:12px; animation:csIn .15s var(--ease); }
+    position:fixed; z-index:300; width:280px; background:color-mix(in srgb,var(--surface) 96%,transparent); border:1px solid color-mix(in srgb,var(--line) 72%,var(--fg));
+    border-radius:14px; box-shadow:var(--sh-lg); padding:13px; backdrop-filter:blur(18px) saturate(135%); animation:csIn .16s var(--ease-out); }
   .dt-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .dt-title { font-size:13px; font-weight:600; }
   .dt-nav { width:28px; height:28px; padding:0; flex:0 0 auto; background:var(--bg); border:1px solid var(--line);
@@ -769,6 +853,8 @@
   th { color:var(--mut); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.35px; background:var(--surface-2); box-shadow:inset 0 -1px 0 var(--line-soft); }
   tbody tr { transition:background .15s var(--ease); }
   tbody tr:hover { background:var(--surface-2); }
+  tbody tr:has(input[type="checkbox"]:checked) { background:color-mix(in srgb,var(--acc) 7%,var(--surface)); }
+  tbody tr:has(input[type="checkbox"]:checked):hover { background:color-mix(in srgb,var(--acc) 11%,var(--surface)); }
   tbody tr:last-child td { border-bottom:0; }
   td.wrap { white-space:normal; }
   td.num { font-family:var(--mono); font-size:12.5px; }
@@ -882,33 +968,32 @@
     min-width:0; padding-top:10px; margin-top:2px; border-top:1px solid var(--line-soft);
   }
   .toolbar-actions-label { color:var(--mut-2); font-size:11px; font-weight:650; white-space:nowrap; }
-  .toolbar-actions .export-actions { margin-left:0; }
+  .toolbar-actions .export-actions { order:10; margin-left:auto; }
   .toolbar-actions > button { margin:0; }
   .toolbar-actions > span[id$="selbar"] {
     display:inline-flex; align-items:center; flex-wrap:wrap; gap:8px;
   }
   .export-actions {
-    display:inline-flex; align-items:center; gap:3px; min-height:34px; padding:3px;
-    border:1px solid var(--line); border-radius:10px; background:var(--surface-2);
-    box-shadow:var(--sh-sm); transition:border-color .18s var(--ease), opacity .18s var(--ease);
+    display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:0;
+    border:0; border-radius:0; background:transparent;
+    box-shadow:none; transition:opacity .18s var(--ease);
   }
-  .export-actions:hover { border-color:var(--acc-ring); }
   .export-actions.is-busy { opacity:.78; pointer-events:none; }
   .export-caption {
-    display:inline-flex; align-items:center; gap:5px; padding:0 7px;
-    color:var(--mut); font-size:11px; font-weight:650; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:5px; min-height:30px; padding:0 3px;
+    color:var(--mut-2); font-size:11px; font-weight:650; white-space:nowrap;
   }
-  .export-caption svg { width:14px; height:14px; color:var(--acc); }
+  .export-caption svg { width:14px; height:14px; color:var(--mut); }
   button.export-btn {
-    min-height:28px; padding:6px 9px; border-radius:7px; box-shadow:none;
-    font-size:11.5px; font-weight:650; white-space:nowrap;
+    min-height:32px; padding:6px 10px; border-radius:8px; box-shadow:none;
+    font-size:11.5px; font-weight:600; white-space:nowrap;
   }
   button.export-btn.filtered {
-    color:var(--acc); background:var(--acc-soft); border-color:var(--acc-ring);
+    color:var(--fg); background:var(--surface-2); border-color:var(--line);
   }
-  button.export-btn.filtered:hover { color:#fff; background:var(--acc); border-color:var(--acc); filter:none; }
-  button.export-btn.full { color:var(--fg); background:transparent; border-color:transparent; }
-  button.export-btn.full:hover { color:var(--fg-strong); background:var(--surface-3); border-color:var(--line); filter:none; }
+  button.export-btn.filtered:hover { color:var(--acc); background:var(--acc-soft); border-color:var(--acc-ring); filter:none; }
+  button.export-btn.full { color:var(--fg); background:var(--surface-2); border-color:var(--line); }
+  button.export-btn.full:hover { color:var(--acc); background:var(--acc-soft); border-color:var(--acc-ring); filter:none; }
   button.export-btn.busy { min-width:72px; }
   .export-btn .spin { width:12px; height:12px; border-width:2px; }
   .meta-stack { display:flex; flex-wrap:wrap; align-items:center; gap:5px; max-width:260px; }
@@ -976,12 +1061,117 @@
   .meta-combo-opt.create { color:var(--acc); }
   .meta-combo-opt.create .mark { color:var(--acc); border-color:var(--acc-ring); border-radius:50%; }
   .meta-combo-empty { padding:12px 9px; color:var(--mut-2); font-size:12px; text-align:center; }
-  #uimodal { overflow-y:auto; }
-  #uimodal .rp-box { overflow:visible; margin:auto; }
+  /* 通用表单弹窗：只滚动内容区，标题和底部操作始终留在视口内。 */
+  #uimodal { overflow:hidden; }
+  #uimodal .rp-box {
+    overflow:hidden; margin:auto; display:flex; flex-direction:column;
+    max-height:min(92vh,920px); max-height:min(92dvh,920px);
+  }
+  #uimodal #ui-title, #uimodal #ui-hint { flex:0 0 auto; }
+  #uimodal #ui-body {
+    flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden;
+    overscroll-behavior:contain; scrollbar-gutter:stable;
+    padding:2px 8px 10px 2px;
+  }
+  #uimodal #ui-actions {
+    flex:0 0 auto; margin-top:0; padding-top:14px;
+    border-top:1px solid var(--line-soft); background:var(--surface);
+  }
+  #uimodal .fp-edit-tabs {
+    position:sticky; top:-2px; z-index:2; display:grid;
+    grid-template-columns:1fr 1fr; gap:6px; margin:0 0 14px; padding:2px 0 8px;
+    background:linear-gradient(180deg,var(--surface) 78%,transparent);
+  }
+  #uimodal .fp-edit-tabs button { color:var(--mut); box-shadow:none; }
+  #uimodal .fp-edit-tabs button.active {
+    color:var(--acc); border-color:var(--acc-ring); background:var(--acc-soft);
+  }
+  #uimodal .fp-edit-panel { display:none; }
+  #uimodal .fp-edit-panel.active { display:grid; }
+  #uimodal div.fp-edit-panel.active:not(.form-grid) { display:block; }
+  #uimodal .fp-runtime-summary {
+    display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;
+    margin:0 0 12px; padding:10px; border:1px solid var(--line-soft);
+    border-radius:var(--r-sm); background:var(--bg);
+  }
+  #uimodal .fp-runtime-summary > div { min-width:0; }
+  #uimodal .fp-runtime-summary span {
+    display:block; margin-bottom:3px; color:var(--mut-2); font-size:10px;
+  }
+  #uimodal .fp-runtime-summary b {
+    display:block; overflow:hidden; color:var(--fg); font-size:11.5px;
+    font-weight:600; text-overflow:ellipsis; white-space:nowrap;
+  }
+  #uimodal .fp-settings {
+    overflow:hidden; border:1px solid var(--line-soft); border-radius:var(--r);
+    background:color-mix(in srgb,var(--surface) 86%,var(--bg));
+  }
+  #uimodal .fp-settings > * { margin:0; }
+  #uimodal .fp-settings > .fp-config-row,
+  #uimodal .fp-settings > .form-field,
+  #uimodal .fp-settings > .fp-mode-fields {
+    padding:13px 14px; border-bottom:1px solid var(--line-soft);
+  }
+  #uimodal .fp-settings > :last-child { border-bottom:0; }
+  #uimodal .fp-config-row {
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  #uimodal .fp-config-row > div:first-child { min-width:0; }
+  #uimodal .fp-config-row b { display:block; color:var(--fg-strong); font-size:12.5px; }
+  #uimodal .fp-config-row span {
+    display:block; margin-top:3px; color:var(--mut-2); font-size:10.5px; line-height:1.45;
+  }
+  #uimodal .fp-segment {
+    display:inline-flex; flex:0 0 auto; align-items:center; padding:2px;
+    border:1px solid var(--line); border-radius:9px; background:var(--bg);
+  }
+  #uimodal .fp-segment button {
+    min-height:27px; padding:4px 10px; border:0; border-radius:7px;
+    background:transparent; box-shadow:none; color:var(--mut); font-size:11px;
+  }
+  #uimodal .fp-segment button:hover:not(:disabled) { color:var(--fg); background:var(--surface-2); filter:none; }
+  #uimodal .fp-segment button.active {
+    color:#fff; background:var(--acc); box-shadow:0 2px 8px color-mix(in srgb,var(--acc) 25%,transparent);
+  }
+  #uimodal .fp-segment button:disabled { opacity:.35; cursor:not-allowed; }
+  #uimodal .fp-mode-fields {
+    opacity:.48; background:color-mix(in srgb,var(--bg) 48%,transparent);
+    transition:opacity .16s var(--ease),background .16s var(--ease);
+  }
+  #uimodal .fp-mode-fields.enabled { opacity:1; background:transparent; }
+  #uimodal .fp-mode-fields.form-grid { gap:10px; }
+  #uimodal .fp-mode-fields > .form-field { margin:0; }
+  #uimodal .fp-settings .form-field label { margin-bottom:6px; color:var(--mut); font-size:10.5px; }
+  #uimodal .fp-readonly {
+    display:grid; grid-template-columns:112px minmax(0,1fr); gap:12px; align-items:start;
+    padding:12px 14px; border-bottom:1px solid var(--line-soft); background:var(--bg);
+  }
+  #uimodal .fp-readonly span { color:var(--mut); font-size:11px; }
+  #uimodal .fp-readonly code {
+    overflow-wrap:anywhere; color:var(--fg); font-family:var(--mono); font-size:10.5px; line-height:1.5;
+  }
+  #uimodal .fp-seed-badge {
+    flex:0 0 auto; padding:5px 8px; border:1px solid var(--line); border-radius:7px;
+    background:var(--bg); color:var(--mut); font-family:var(--mono); font-size:10.5px;
+  }
+  #uimodal #ui-extra-action { margin-right:auto; }
   @media(max-width:600px) {
     .manage-toolbar input, .manage-toolbar select, .manage-toolbar .cs { flex:1 1 calc(50% - 8px); max-width:none; }
     .manage-toolbar input[type="search"] { min-width:0; }
     .manage-toolbar .toolbar-spacer { display:none; }
+    #uimodal { padding:8px; }
+    #uimodal .rp-box {
+      width:100%!important; max-height:calc(100vh - 16px); max-height:calc(100dvh - 16px);
+      padding:18px 16px 14px;
+    }
+    #uimodal #ui-actions > button { flex:1 1 0!important; min-height:42px; }
+    #uimodal .fp-runtime-summary { grid-template-columns:1fr; }
+    #uimodal .fp-config-row { align-items:flex-start; flex-direction:column; gap:8px; }
+    #uimodal .fp-segment { align-self:stretch; display:grid; grid-auto-flow:column; grid-auto-columns:1fr; }
+    #uimodal .fp-segment button { padding-inline:5px; }
+    #uimodal .fp-readonly { grid-template-columns:1fr; gap:5px; }
+    #uimodal #ui-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    #uimodal #ui-extra-action { margin-right:0; }
   }
 
   /* table inside a card without extra border for the small acc/notif tables */
@@ -1025,6 +1215,12 @@
   #qrbox img { width:180px; height:180px; background:#fff; border-radius:8px; }
   #qrstatus > svg { width:15px; height:15px; color:var(--info); vertical-align:-3px; }
   .mut { color:var(--mut); font-size:12px; }
+  .comment-user { max-width:250px; }
+  .comment-user-sec {
+    display:block; max-width:240px; margin-top:3px; overflow:hidden;
+    color:var(--mut-2); font:400 10.5px/1.3 var(--mono);
+    text-overflow:ellipsis; white-space:nowrap;
+  }
   .hint { color:var(--mut-2); font-size:12px; line-height:1.55; }
   a { color:var(--info); text-decoration:none; }
   a:hover { text-decoration:underline; }
@@ -1082,6 +1278,19 @@
   .collection-kpi { padding:10px 12px; border:1px solid var(--line-soft); border-radius:var(--r-sm); background:var(--bg); }
   .collection-kpi b { display:block; color:var(--fg-strong); font:650 18px/1.25 var(--mono); }
   .collection-kpi span { color:var(--mut); font-size:11px; }
+  .collection-filter-grid { padding-top:12px; border-top:1px solid var(--line-soft); }
+  .collection-advanced {
+    border:1px solid var(--line-soft); border-radius:var(--r-sm); background:var(--bg);
+  }
+  .collection-advanced > summary {
+    min-height:44px; display:flex; align-items:center; gap:8px; padding:9px 12px;
+    color:var(--fg); font-size:12px; font-weight:600; cursor:pointer; list-style:none;
+  }
+  .collection-advanced > summary::-webkit-details-marker { display:none; }
+  .collection-advanced > summary::before { content:"+"; color:var(--acc); font:600 16px/1 var(--mono); }
+  .collection-advanced[open] > summary::before { content:"−"; }
+  .collection-advanced > summary span { color:var(--mut); font-weight:400; }
+  .collection-advanced-body { padding:0 12px 12px; }
   .job-progress { min-width:150px; display:grid; gap:6px; }
   .job-progress-head { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--mut); font-size:11px; }
   .progress-track { height:6px; overflow:hidden; border-radius:999px; background:var(--surface-3); border:1px solid var(--line-soft); }
@@ -1337,6 +1546,63 @@
   /* 行/卡片刷新时的轻微"陈旧"提示:配合 INFLIGHT 暂停轮询,这里给手动刷新一个柔和过渡 */
   .table-wrap.stale { opacity:.55; transition:opacity .2s var(--ease); }
 
+  /* ── 统一任务队列 ── */
+  .queue-stats { display:grid; grid-template-columns:repeat(5,minmax(120px,1fr)); gap:10px; }
+  button.queue-stat {
+    min-height:82px; padding:13px 15px; text-align:left; display:grid; gap:5px;
+    background:var(--surface); color:var(--fg); border:1px solid var(--line);
+    border-radius:var(--r); box-shadow:var(--sh-sm); filter:none;
+  }
+  button.queue-stat:hover { background:var(--surface-2); border-color:var(--acc-ring); filter:none; }
+  button.queue-stat.active { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-soft); }
+  .queue-stat b { font:650 22px/1 var(--mono); color:var(--fg-strong); }
+  .queue-stat span { color:var(--mut); font-size:12px; }
+  .queue-stat[data-tone="info"] b { color:var(--info); }
+  .queue-stat[data-tone="warn"] b { color:var(--warn); }
+  .queue-stat[data-tone="danger"] b { color:var(--danger); }
+  .queue-toolbar {
+    display:grid; grid-template-columns:minmax(130px,.8fr) minmax(150px,1fr) minmax(130px,.8fr) minmax(220px,1.6fr) auto;
+    gap:10px; align-items:end; margin-bottom:14px;
+  }
+  .queue-toolbar .form-field { min-width:0; }
+  .queue-toolbar button { min-height:40px; }
+  .queue-table { min-width:1040px; table-layout:fixed; }
+  .queue-table .queue-col-type { width:122px; }
+  .queue-table .queue-col-content { width:310px; }
+  .queue-table .queue-col-account { width:150px; }
+  .queue-table .queue-col-time { width:160px; }
+  .queue-table .queue-col-status { width:118px; }
+  .queue-table .queue-col-reason { width:230px; }
+  .queue-table .queue-col-action { width:92px; }
+  .queue-copy, .queue-reason { white-space:normal; min-width:0; line-height:1.45; overflow-wrap:anywhere; }
+  .queue-copy b { display:block; color:var(--fg-strong); font-weight:620; }
+  .queue-copy small, .queue-reason small, .queue-account small, .queue-time small {
+    display:block; margin-top:3px; color:var(--mut); font-size:11px; line-height:1.4;
+  }
+  .queue-account { white-space:normal; }
+  .queue-time { font:500 11px/1.45 var(--mono); white-space:normal; color:var(--mut); }
+  .queue-reason { color:var(--mut); font-size:12px; }
+  .queue-reason.has-error { color:var(--danger); }
+  .queue-blocked { background:var(--warn-soft); color:var(--warn); border-color:rgba(251,191,36,.3); }
+  .queue-running { background:var(--info-soft); color:var(--info); border-color:rgba(56,189,248,.25); }
+  .queue-completed { background:var(--success-soft); color:var(--success); border-color:rgba(52,211,153,.25); }
+  .queue-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:12px; }
+  .queue-pager-actions { display:flex; align-items:center; gap:7px; }
+  .queue-pager button { min-width:40px; min-height:38px; padding:8px 11px; }
+  .queue-pager .form-field { grid-template-columns:auto auto; align-items:center; gap:7px; }
+  .queue-pager select { min-width:82px; }
+  @media(max-width:1050px) {
+    .queue-stats { grid-template-columns:repeat(3,1fr); }
+    .queue-toolbar { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .queue-toolbar > button { grid-column:1/-1; }
+  }
+  @media(max-width:640px) {
+    .queue-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .queue-toolbar { grid-template-columns:1fr; }
+    .queue-toolbar > button { grid-column:auto; }
+    .queue-pager, .queue-pager-actions { justify-content:center; }
+  }
+
   /* ── navigation helpers ── */
   .skip-link {
     position:fixed; left:16px; top:10px; z-index:500; padding:9px 13px;
@@ -1368,6 +1634,7 @@
     .page-context { align-items:center; }
     .page-context h2 { font-size:20px; }
     .navitem.active::before { left:10px; right:10px; top:auto; bottom:-9px; width:auto; height:2px; border-radius:2px 2px 0 0; }
+    .navitem:hover { transform:none; }
   }
   @media(max-width:700px) {
     :root { --header-h:104px; }
@@ -1388,7 +1655,7 @@
     .card-head .right { width:100%; margin-left:41px; }
     .card-head .right > .cs, .card-head .right > select { width:100%!important; max-width:none!important; }
     .manage-toolbar { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .manage-toolbar .export-actions { margin-left:0; }
+    .manage-toolbar .export-actions { margin-left:auto; }
     .row { flex-wrap:wrap; align-items:stretch; }
     .row > * { min-width:0; }
     .quick-actions { grid-template-columns:1fr; }
@@ -1446,7 +1713,57 @@
     button.sm { padding:8px 12px; }
     .navitem, .tab { padding-top:11px; padding-bottom:11px; }
     input, textarea, select { padding-top:11px; padding-bottom:11px; }
+    input[type="checkbox"], input[type="radio"] { padding:0; }
     .acttd button { margin-left:6px; }
+  }
+
+  /* ── 风控中心：高密度运维看板 ── */
+  .risk-stats { display:grid; grid-template-columns:repeat(6,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
+  .risk-stat { min-height:88px; padding:14px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface); display:grid; gap:4px; box-shadow:var(--sh-sm); }
+  .risk-stat b { font:600 23px/1 var(--mono); color:var(--fg-strong); }
+  .risk-stat span { color:var(--mut); font-size:12px; }
+  .risk-stat[data-tone="danger"] { border-color:rgba(248,113,113,.35); background:linear-gradient(135deg,var(--danger-soft),var(--surface) 68%); }
+  .risk-stat[data-tone="warn"] { border-color:rgba(251,191,36,.3); background:linear-gradient(135deg,var(--warn-soft),var(--surface) 68%); }
+  .risk-stat[data-tone="success"] { border-color:rgba(52,211,153,.28); }
+  .risk-toolbar { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:12px; }
+  .risk-toolbar .spacer { flex:1; }
+  .risk-status { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid var(--line); border-radius:999px; font-size:11.5px; font-weight:650; white-space:nowrap; }
+  .risk-status::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--mut); }
+  .risk-status.success { color:var(--success); background:var(--success-soft); border-color:rgba(52,211,153,.28); }
+  .risk-status.success::before { background:var(--success); }
+  .risk-status.warn { color:var(--warn); background:var(--warn-soft); border-color:rgba(251,191,36,.3); }
+  .risk-status.warn::before { background:var(--warn); }
+  .risk-status.danger { color:var(--danger); background:var(--danger-soft); border-color:rgba(248,113,113,.34); }
+  .risk-status.danger::before { background:var(--danger); }
+  .risk-account { display:grid; gap:2px; min-width:150px; }
+  .risk-account small, .risk-reason small { color:var(--mut); font-size:11px; }
+  .risk-reason { min-width:240px; max-width:420px; white-space:normal; line-height:1.45; }
+  .risk-progress { display:grid; grid-template-columns:1fr auto; gap:5px 8px; align-items:center; min-width:120px; }
+  .risk-progress-track { height:5px; border-radius:999px; overflow:hidden; background:var(--surface-3); }
+  .risk-progress-track i { display:block; height:100%; background:var(--warn); border-radius:inherit; }
+  .risk-progress span { color:var(--mut); font:500 11px/1 var(--mono); }
+  .risk-config-shell { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .risk-config-group { margin:0; padding:14px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface-2); min-width:0; }
+  .risk-config-group legend { padding:0 7px; color:var(--fg-strong); font-weight:650; }
+  .risk-config-group .form-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .risk-config-group.wide { grid-column:1/-1; }
+  .risk-limit-table input { min-width:76px; width:100%; }
+  .risk-limit-table th { font-size:11px; }
+  .risk-event-list { display:grid; gap:0; max-height:62vh; overflow:auto; }
+  .risk-event { display:grid; grid-template-columns:116px 90px 96px 1fr; gap:12px; padding:11px 4px; border-bottom:1px solid var(--line-soft); align-items:start; }
+  .risk-event time { font:500 11px/1.45 var(--mono); color:var(--mut); }
+  .risk-event-detail { min-width:0; overflow-wrap:anywhere; }
+  .risk-event-detail small { display:block; color:var(--mut); margin-top:2px; }
+  @media(max-width:1100px) {
+    .risk-stats { grid-template-columns:repeat(3,1fr); }
+    .risk-config-shell { grid-template-columns:1fr; }
+    .risk-config-group.wide { grid-column:auto; }
+  }
+  @media(max-width:640px) {
+    .risk-stats { grid-template-columns:repeat(2,1fr); }
+    .risk-config-group .form-grid { grid-template-columns:1fr; }
+    .risk-event { grid-template-columns:92px 74px 1fr; }
+    .risk-event-detail { grid-column:1/-1; }
   }
 </style>
 </head>
@@ -1524,11 +1841,14 @@
     <div class="nav-sep">本账号</div>
     <button class="navitem" data-tab="hub" onclick="switchTab('hub', true)"><svg><use href="#i-user"/></svg><span class="nav-label">账号管理</span></button>
     <div class="nav-sep">工具</div>
+    <button class="navitem" data-tab="queue" onclick="switchTab('queue', true)"><svg><use href="#i-list"/></svg><span class="nav-label">任务队列</span><span class="nav-badge" id="tb-queue">0</span></button>
     <button class="navitem pub-only" data-tab="publish" onclick="switchTab('publish', true)"><svg><use href="#i-send"/></svg><span class="nav-label">发布</span><span class="nav-badge" id="tb-pub">0</span></button>
     <button class="navitem notsh-only" data-tab="autocomment" onclick="switchTab('autocomment', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">自动评论</span><span class="nav-badge" id="tb-ac">0</span></button>
     <button class="navitem" data-tab="share-download" onclick="switchTab('share-download', true)"><svg><use href="#i-download"/></svg><span class="nav-label">链接下载</span></button>
     <button class="navitem" data-tab="notifications" onclick="switchTab('notifications', true)"><svg><use href="#i-bell"/></svg><span class="nav-label">通知</span></button>
     <button class="navitem" data-tab="settings" onclick="switchTab('settings', true)"><svg><use href="#i-settings"/></svg><span class="nav-label">设置</span></button>
+    <div class="nav-sep">安全</div>
+    <button class="navitem" data-tab="risk-control" onclick="switchTab('risk-control', true)"><svg><use href="#i-shield"/></svg><span class="nav-label">风控中心</span><span class="nav-badge" id="tb-risk">0</span></button>
   </nav>
 </aside>
 <main id="main-content" tabindex="-1">
@@ -1629,6 +1949,25 @@
       <div class="table-wrap mini-table"><table id="acc-table" aria-label="平台账号列表"><tbody></tbody></table></div>
     </div>
 
+    <!-- 指纹 Chromium 多版本内核 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-film"/></svg></span>
+        <h2>浏览器内核 <span class="sub">多版本管理 · 账号固定绑定</span></h2>
+      </div>
+      <p class="mut" style="font-size:12px;margin:-4px 0 12px">
+        扫描当前机器的 Chromium 安装目录，或手动添加 <code>chrome.exe</code> / <code>chrome</code>。
+        每台机器可以使用不同路径；每个账号可在上方「环境」中固定选择一个版本，不同版本使用独立 Profile。
+        新指纹环境首次登录或手动打开时会附带 BrowserScan 体检标签；该第三方页面会获取当前出口 IP 与浏览器特征。
+        <br>当前扫描目录：<code id="runtime-root">读取中…</code>
+      </p>
+      <div class="form-actions">
+        <button class="ghost" onclick="scanBrowserRuntimes()"><svg><use href="#i-eye"/></svg>扫描内核目录</button>
+        <button class="ghost" onclick="addBrowserRuntime()"><svg><use href="#i-plus"/></svg>手动添加 chrome.exe</button>
+      </div>
+      <div class="table-wrap mini-table"><table id="runtime-table" aria-label="浏览器内核列表"><tbody></tbody></table></div>
+    </div>
+
     <!-- 代理池(提前配置好,账号从池里关联) -->
     <div class="card">
       <div class="card-head">
@@ -1658,6 +1997,138 @@
     </div>
   </section>
 
+  <section data-panel="risk-control">
+    <div class="risk-stats" aria-label="风控状态统计">
+      <div class="risk-stat" data-tone="success"><b id="risk-stat-normal">—</b><span>正常账号</span></div>
+      <div class="risk-stat" data-tone="danger"><b id="risk-stat-cooldown">—</b><span>冷却 / 暂停 / 熔断</span></div>
+      <div class="risk-stat" data-tone="warn"><b id="risk-stat-recovering">—</b><span>渐进恢复</span></div>
+      <div class="risk-stat" data-tone="danger"><b id="risk-stat-invalid">—</b><span>登录 / 代理异常</span></div>
+      <div class="risk-stat" data-tone="warn"><b id="risk-stat-blocked">—</b><span>受阻任务</span></div>
+      <div class="risk-stat"><b id="risk-stat-today">—</b><span>今日风险事件</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-shield"/></svg></span>
+        <h2>账号风险态势 <span class="sub">状态、原因、恢复进度与待执行任务</span></h2>
+      </div>
+      <div class="risk-toolbar">
+        <input id="risk-account-search" type="search" placeholder="搜索账号或原因" aria-label="搜索风险账号" oninput="renderRiskAccounts()">
+        <select id="risk-status-filter" aria-label="筛选风险状态" onchange="renderRiskAccounts()">
+          <option value="">全部状态</option><option value="normal">正常</option><option value="cooldown">风险冷却</option>
+          <option value="recovering">渐进恢复</option><option value="auth_invalid">登录失效</option>
+          <option value="proxy_error">代理异常</option><option value="network_circuit">网络熔断</option>
+          <option value="write_paused">写入暂停</option>
+        </select>
+        <span class="filter-count" id="risk-filter-count" role="status" aria-live="polite"></span>
+        <span class="spacer"></span>
+        <button class="ghost sm" id="risk-admin-token-btn" type="button" onclick="setRiskAdminToken()" style="display:none"><svg><use href="#i-shield"/></svg>管理口令</button>
+        <button class="ghost sm" type="button" onclick="refreshRiskCenter(true)"><svg><use href="#i-play"/></svg>刷新状态</button>
+      </div>
+      <div class="table-wrap"><table aria-label="账号风险状态列表">
+        <thead><tr><th>账号</th><th>状态</th><th>等级</th><th>原因</th><th>冷却 / 探测</th><th>恢复</th><th>任务</th><th>网络</th><th>操作</th></tr></thead>
+        <tbody id="risk-account-table"></tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-settings"/></svg></span>
+        <h2>风控规则 <span class="sub">保存后立即作用于后台调度</span></h2>
+        <span class="right status-text" id="risk-config-msg" role="status" aria-live="polite"></span>
+      </div>
+      <div class="form-grid" style="margin-bottom:12px">
+        <label class="switch-row"><input type="checkbox" id="risk-enabled"><span class="switch-copy"><b>启用统一风控</b><span>关闭后平台操作不经过持久化风控闸门</span></span></label>
+        <div class="form-field"><label for="risk-mode">策略模式</label><select id="risk-mode"><option value="conservative">保守模式（保留安全下限）</option><option value="custom">自定义模式</option></select></div>
+        <div class="form-field"><label for="risk-retention">事件保留天数</label><input id="risk-retention" type="number" min="1" max="3650"></div>
+      </div>
+      <div class="risk-config-shell">
+        <fieldset class="risk-config-group">
+          <legend>读取与恢复</legend>
+          <div class="form-grid">
+            <div class="form-field"><label for="risk-read-light">轻量读取间隔（秒）</label><input id="risk-read-light" type="number" min="0"></div>
+            <div class="form-field"><label for="risk-read-heavy">重读取间隔（秒）</label><input id="risk-read-heavy" type="number" min="0"></div>
+            <div class="form-field"><label for="risk-recovery-count">恢复成功次数</label><input id="risk-recovery-count" type="number" min="1" max="20"></div>
+            <div class="form-field"><label for="risk-probe-gap">探测间隔（分钟）</label><input id="risk-probe-gap" type="number" min="1"></div>
+            <div class="form-field" style="grid-column:span 2"><label for="risk-cooldown-steps">冷却阶梯（分钟，逗号分隔）</label><input id="risk-cooldown-steps" placeholder="30, 120, 360, 1440"></div>
+          </div>
+        </fieldset>
+        <fieldset class="risk-config-group">
+          <legend>网络与时间策略</legend>
+          <div class="form-grid">
+            <div class="form-field"><label for="risk-network-concurrency">同出口并发</label><input id="risk-network-concurrency" type="number" min="1" max="32"></div>
+            <div class="form-field"><label for="risk-network-accounts">熔断账号阈值</label><input id="risk-network-accounts" type="number" min="0"></div>
+            <div class="form-field"><label for="risk-network-window">统计窗口（分钟）</label><input id="risk-network-window" type="number" min="1"></div>
+            <div class="form-field"><label for="risk-network-cooldown">出口冷却（分钟）</label><input id="risk-network-cooldown" type="number" min="1"></div>
+            <div class="form-field"><label for="risk-account-check">账号体检间隔（分钟）</label><input id="risk-account-check" type="number" min="0"></div>
+            <div class="form-field"><label for="risk-captcha-wait">验证码等待（分钟）</label><input id="risk-captcha-wait" type="number" min="0"></div>
+            <label class="switch-row" style="grid-column:1/-1"><input type="checkbox" id="risk-quiet-enabled"><span class="switch-copy"><b>启用写操作活跃时段</b><span>时段外的自动写操作保持等待</span></span></label>
+            <div class="form-field"><label for="risk-active-start">开始小时</label><input id="risk-active-start" type="number" min="0" max="23"></div>
+            <div class="form-field"><label for="risk-active-end">结束小时</label><input id="risk-active-end" type="number" min="1" max="47"></div>
+          </div>
+        </fieldset>
+        <fieldset class="risk-config-group wide">
+          <legend>写操作间隔与额度</legend>
+          <div class="table-wrap"><table class="risk-limit-table" aria-label="写操作风控额度">
+            <thead><tr><th>操作</th><th>最小间隔（分钟）</th><th>每小时上限</th><th>每日上限</th></tr></thead>
+            <tbody>
+              <tr><td>评论 / 回复</td><td><input id="risk-comment-gap" type="number" min="0" aria-label="评论或回复最小间隔（分钟）"></td><td><input id="risk-comment-hourly" type="number" min="0" aria-label="评论或回复每小时上限"></td><td><input id="risk-comment-daily" type="number" min="0" aria-label="评论或回复每日上限"></td></tr>
+              <tr><td>关注 / 取关</td><td><input id="risk-social-gap" type="number" min="0" aria-label="关注或取关最小间隔（分钟）"></td><td><input id="risk-social-hourly" type="number" min="0" aria-label="关注或取关每小时上限"></td><td><input id="risk-social-daily" type="number" min="0" aria-label="关注或取关每日上限"></td></tr>
+              <tr><td>私信</td><td><input id="risk-dm-gap" type="number" min="0" aria-label="私信最小间隔（分钟）"></td><td><input id="risk-dm-hourly" type="number" min="0" aria-label="私信每小时上限"></td><td><input id="risk-dm-daily" type="number" min="0" aria-label="私信每日上限"></td></tr>
+              <tr><td>发布</td><td><input id="risk-publish-gap" type="number" min="0" aria-label="发布最小间隔（分钟）"></td><td><input id="risk-publish-hourly" type="number" min="0" aria-label="发布每小时上限"></td><td><input id="risk-publish-daily" type="number" min="0" aria-label="发布每日上限"></td></tr>
+            </tbody>
+          </table></div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="form-field"><label for="risk-shared-write">共享写间隔（分钟）</label><input id="risk-shared-write" type="number" min="0"></div>
+            <div class="form-field"><label for="risk-combined-hourly">综合动作小时上限</label><input id="risk-combined-hourly" type="number" min="0"></div>
+            <div class="form-field"><label for="risk-combined-daily">综合动作每日上限</label><input id="risk-combined-daily" type="number" min="0"></div>
+          </div>
+        </fieldset>
+      </div>
+      <div class="form-note" style="margin-top:12px"><svg aria-hidden="true"><use href="#i-info"/></svg><span>保守模式会强制保留评论、社交、私信、发布和共享写入间隔的安全下限；需要完全按输入值运行时选择自定义模式。</span></div>
+      <div class="form-actions"><button class="ghost" type="button" onclick="showRiskAudit()"><svg><use href="#i-list"/></svg>查看变更记录</button><span class="actions-spacer"></span><button type="button" onclick="saveRiskConfig()"><svg><use href="#i-check"/></svg>保存并立即生效</button></div>
+    </div>
+  </section>
+
+  <section data-panel="queue">
+    <div class="queue-stats" aria-label="任务队列统计">
+      <button type="button" class="queue-stat active" data-queue-state="active" onclick="setTaskQueueState('active')"><b id="queue-stat-active">—</b><span>处理中 / 等待中</span></button>
+      <button type="button" class="queue-stat" data-queue-state="pending" onclick="setTaskQueueState('pending')"><b id="queue-stat-pending">—</b><span>等待执行</span></button>
+      <button type="button" class="queue-stat" data-queue-state="running" data-tone="info" onclick="setTaskQueueState('running')"><b id="queue-stat-running">—</b><span>正在执行</span></button>
+      <button type="button" class="queue-stat" data-queue-state="blocked" data-tone="warn" onclick="setTaskQueueState('blocked')"><b id="queue-stat-blocked">—</b><span>风控延后</span></button>
+      <button type="button" class="queue-stat" data-queue-state="failed" data-tone="danger" onclick="setTaskQueueState('failed')"><b id="queue-stat-failed">—</b><span>失败 / 待处理</span></button>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-list"/></svg></span>
+        <h2>任务明细 <span class="sub">统一查看采集、发布、评论、账号动作和下载任务</span></h2>
+      </div>
+      <div class="queue-toolbar" aria-label="任务队列筛选">
+        <div class="form-field"><label for="queue-platform">平台范围</label><select id="queue-platform" onchange="refreshTaskQueue(true)"><option value="current" id="queue-platform-current">当前平台</option><option value="all">全部平台</option></select></div>
+        <div class="form-field"><label for="queue-type">队列类型</label><select id="queue-type" onchange="refreshTaskQueue(true)"><option value="">全部队列</option><option value="collections">关键词采集</option><option value="publishes">内容发布</option><option value="comments">自动评论</option><option value="actions">账号动作</option><option value="monitor_downloads">监控下载</option><option value="collection_downloads">采集下载</option></select></div>
+        <div class="form-field"><label for="queue-state">任务状态</label><select id="queue-state" onchange="refreshTaskQueue(true)"><option value="active">活动任务</option><option value="pending">等待执行</option><option value="running">正在执行</option><option value="blocked">风控延后</option><option value="failed">失败任务</option><option value="completed">已完成</option><option value="all">全部状态</option></select></div>
+        <div class="form-field"><label for="queue-query">搜索</label><input id="queue-query" type="search" placeholder="任务内容、账号、错误或风控原因" onkeydown="if(event.key==='Enter'){event.preventDefault();refreshTaskQueue(true)}"></div>
+        <button type="button" class="ghost" onclick="refreshTaskQueue(true)"><svg><use href="#i-bolt"/></svg>刷新</button>
+      </div>
+      <div class="table-wrap" id="queue-table-wrap">
+        <table class="queue-table" aria-label="任务队列明细">
+          <thead><tr><th class="queue-col-type">队列</th><th class="queue-col-content">任务内容</th><th class="queue-col-account">账号</th><th class="queue-col-time">时间</th><th class="queue-col-status">状态</th><th class="queue-col-reason">阻塞 / 错误</th><th class="queue-col-action">操作</th></tr></thead>
+          <tbody id="queue-table"></tbody>
+        </table>
+      </div>
+      <div class="queue-pager" id="queue-pager" hidden>
+        <span class="mut" id="queue-page-info">第 1 / 1 页</span>
+        <div class="queue-pager-actions">
+          <button type="button" class="ghost" id="queue-first" onclick="goTaskQueuePage(1)" aria-label="任务队列第一页">«</button>
+          <button type="button" class="ghost" id="queue-prev" onclick="goTaskQueuePage(TASK_QUEUE_PAGE-1)" aria-label="任务队列上一页">‹</button>
+          <button type="button" class="ghost" id="queue-next" onclick="goTaskQueuePage(TASK_QUEUE_PAGE+1)" aria-label="任务队列下一页">›</button>
+          <button type="button" class="ghost" id="queue-last" onclick="goTaskQueuePage(TASK_QUEUE_PAGES)" aria-label="任务队列最后一页">»</button>
+        </div>
+        <div class="form-field"><label for="queue-page-size">每页</label><select id="queue-page-size" onchange="setTaskQueuePageSize(this.value)"><option value="10">10 条</option><option value="20" selected>20 条</option><option value="50">50 条</option><option value="100">100 条</option></select></div>
+      </div>
+    </div>
+  </section>
+
   <section data-panel="collections" class="collect-only">
     <div class="card">
       <div class="card-head">
@@ -1676,6 +2147,22 @@
           <div class="form-field"><label for="col-comment-limit">每作品评论上限</label><input id="col-comment-limit" type="number" min="0" max="200" value="20" inputmode="numeric"></div>
           <div class="form-field dy-only"><label for="col-quality">视频画质</label><select id="col-quality"><option value="highest">原画 / 最高</option><option value="1080">1080P</option><option value="720">720P</option><option value="540">540P</option><option value="lowest">最低省流</option></select></div>
         </div>
+        <div class="form-grid cols-4 collection-filter-grid" aria-label="搜索深度与排序">
+          <div class="form-field"><label for="col-page-limit">每词采集深度 <span class="field-scope">1–40 页</span></label><input id="col-page-limit" type="number" min="1" max="40" value="12" inputmode="numeric"><p class="hint">一页对应一次搜索结果下滑。</p></div>
+          <div class="form-field"><label for="col-sort">搜索排序</label><select id="col-sort"><option value="general">综合排序</option><option value="latest">最新发布</option><option value="most_liked">最多点赞</option></select></div>
+          <div class="form-field"><label for="col-publish-time">发布时间</label><select id="col-publish-time"><option value="all">不限</option><option value="day">一天内</option><option value="week">一周内</option><option value="half_year">半年内</option></select></div>
+          <div class="form-field"><label for="col-content-type">内容类型</label><select id="col-content-type"><option value="all">全部作品</option><option value="video">视频</option><option value="images">图文 / 图集</option></select></div>
+        </div>
+        <details class="collection-advanced">
+          <summary>高级停止与数据门槛 <span>可选，减少无效结果</span></summary>
+          <div class="collection-advanced-body">
+            <div class="form-grid cols-4">
+              <div class="form-field"><label for="col-min-likes">最低点赞数</label><input id="col-min-likes" type="number" min="0" value="0" inputmode="numeric"></div>
+              <div class="form-field"><label for="col-min-comments">最低评论数</label><input id="col-min-comments" type="number" min="0" value="0" inputmode="numeric"></div>
+              <div class="form-field"><label for="col-stagnant-pages">连续无新增停止 <span class="field-scope">1–8 页</span></label><input id="col-stagnant-pages" type="number" min="1" max="8" value="3" inputmode="numeric"></div>
+            </div>
+          </div>
+        </details>
         <div class="form-field" id="col-dir-wrap" style="display:none">
           <label for="col-download-dir">下载目录（可选）</label>
           <input id="col-download-dir" placeholder="留空保存到 data/media/keyword-collections">
@@ -1686,7 +2173,7 @@
         </div>
         <div class="platform-callout" role="note">
           <svg aria-hidden="true"><use href="#i-info"/></svg>
-          <div><b>按上限采集，不承诺搜索全量</b><p>抖音采集会临时打开可见浏览器窗口；搜索排序会受平台和账号状态影响；任务默认串行执行，可随时取消，已入库结果会保留。</p></div>
+          <div><b>作品上限、深度页和停止条件任一满足即结束</b><p>抖音采集会临时打开可见浏览器窗口；平台筛选后还会在本地复核类型、时间和数据门槛；任务默认串行执行，可随时取消，已入库结果会保留。</p></div>
         </div>
         <div class="form-actions">
           <span class="status-text" id="col-create-msg" role="status" aria-live="polite"></span>
@@ -1782,6 +2269,41 @@
               <option value="images">仅图集</option><option value="none">仅记录，不下载</option>
           </select></div>
         </div>
+        <details class="collection-advanced monitor-advanced">
+          <summary>高级抓取与筛选 <span>控制翻页深度、单轮上限和入库条件</span></summary>
+          <div class="collection-advanced-body">
+            <div class="form-grid cols-4">
+              <div class="form-field"><label for="t-max-scrolls">抓取深度</label><select id="t-max-scrolls">
+                <option value="0">平台默认</option><option value="3">3 次下滑</option>
+                <option value="6">6 次下滑</option><option value="12">12 次下滑</option>
+                <option value="20">20 次下滑</option><option value="30">30 次下滑</option>
+              </select></div>
+              <div class="form-field"><label for="t-max-items">每轮作品上限</label><select id="t-max-items">
+                <option value="0">平台默认</option><option value="5">5 条</option>
+                <option value="12">12 条</option><option value="20">20 条</option>
+                <option value="50">50 条</option><option value="100">100 条</option>
+              </select></div>
+              <div class="form-field"><label for="t-record-media">作品类型</label><select id="t-record-media">
+                <option value="all">全部入库</option><option value="video">仅视频</option>
+                <option value="images">仅图文/图集</option>
+              </select></div>
+              <div class="form-field"><label for="t-recent-days">发布时间范围</label>
+                <input id="t-recent-days" type="number" min="0" max="3650" value="0" inputmode="numeric">
+                <div class="field-help">最近 N 天；0 表示不限</div></div>
+            </div>
+            <div class="form-grid cols-4">
+              <div class="form-field"><label for="t-min-likes">最低点赞数</label>
+                <input id="t-min-likes" type="number" min="0" max="1000000000" value="0" inputmode="numeric"></div>
+              <div class="form-field"><label for="t-min-comments">最低评论数</label>
+                <input id="t-min-comments" type="number" min="0" max="1000000000" value="0" inputmode="numeric"></div>
+              <div class="form-field"><label for="t-include-keywords">必须包含</label>
+                <input id="t-include-keywords" maxlength="320" placeholder="多个词用逗号分隔"></div>
+              <div class="form-field"><label for="t-exclude-keywords">排除关键词</label>
+                <input id="t-exclude-keywords" maxlength="320" placeholder="多个词用逗号分隔"></div>
+            </div>
+            <div class="field-help">筛选只决定作品是否进入监控记录；“自动下载范围”仍单独控制下载行为。深度越高，请求耗时与账号访问频率越高。</div>
+          </div>
+        </details>
         <div class="form-actions">
           <span class="status-text" id="add-msg" role="status" aria-live="polite"></span>
           <button onclick="addMonitor()"><svg><use href="#i-target"/></svg>开始监控</button>
@@ -1879,8 +2401,8 @@
           </span>
           <div class="export-actions" role="group" aria-label="链接下载历史 Excel 导出">
             <span class="export-caption" title="导出链接下载历史"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span>
-            <button type="button" class="export-btn filtered" onclick="exportShareHistoryReport(false, this)" title="按当前筛选条件导出链接下载历史" aria-label="导出链接下载历史筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button>
-            <button type="button" class="export-btn full" onclick="exportShareHistoryReport(true, this)" title="忽略筛选，导出当前平台全部链接下载历史" aria-label="导出链接下载历史全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button>
+          <button type="button" class="export-btn filtered" onclick="exportShareHistoryReport(false, this)" title="导出当前条件下的链接下载历史" aria-label="导出链接下载历史当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button>
+          <button type="button" class="export-btn full" onclick="exportShareHistoryReport(true, this)" title="导出当前平台全部链接下载历史" aria-label="导出链接下载历史全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button>
           </div>
         </div>
       </div>
@@ -2215,7 +2737,7 @@
       <select id="mon-group" aria-label="按分组筛选监控" onchange="onMonitorFilter()"><option value="">全部分组</option></select>
       <select id="mon-tag" aria-label="按标签筛选监控" onchange="onMonitorFilter()"><option value="">全部标签</option></select>
       <span class="filter-count" id="mon-filter-count" role="status" aria-live="polite"></span>
-      <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span><div class="export-actions" role="group" aria-label="监控列表 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('monitors', false, this)" title="按当前筛选条件导出全部匹配记录" aria-label="导出监控列表筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button><button type="button" class="export-btn full" onclick="exportModuleReport('monitors', true, this)" title="忽略本模块筛选，导出当前平台全部记录" aria-label="导出监控列表全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button></div></div>
+      <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span><div class="export-actions" role="group" aria-label="监控列表 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('monitors', false, this)" title="导出当前条件下的全部匹配记录" aria-label="导出监控列表当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button><button type="button" class="export-btn full" onclick="exportModuleReport('monitors', true, this)" title="导出当前平台全部记录" aria-label="导出监控列表全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button></div></div>
     </div>
     <div class="table-wrap"><table aria-label="作品监控列表"><thead><tr>
       <th>用户</th><th>分组 / 标签</th><th>作品数</th><th>间隔</th><th>下载设置</th><th>上次扫描</th><th>状态</th><th></th>
@@ -2250,7 +2772,7 @@
       </select>
       <span class="filter-count" id="content-filter-count" role="status" aria-live="polite"></span>
       <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span>
-        <div class="export-actions" role="group" aria-label="作品数据 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('contents', false, this)" title="按当前筛选条件导出全部匹配记录" aria-label="导出作品数据筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button><button type="button" class="export-btn full" onclick="exportModuleReport('contents', true, this)" title="忽略本模块筛选，导出当前平台全部记录" aria-label="导出作品数据全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button></div>
+        <div class="export-actions" role="group" aria-label="作品数据 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('contents', false, this)" title="导出当前条件下的全部匹配记录" aria-label="导出作品数据当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button><button type="button" class="export-btn full" onclick="exportModuleReport('contents', true, this)" title="导出当前平台全部记录" aria-label="导出作品数据全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button></div>
         <button class="ghost sm" id="content-selall-btn" onclick="contentSelAllToggle()">全选</button>
         <span id="content-selbar" style="display:none;align-items:center;gap:8px">
           <span class="mut" id="content-selcount">已选 0</span>
@@ -2362,7 +2884,7 @@
       <select id="watch-group" aria-label="按分组筛选评论监控" onchange="onWatchFilter()"><option value="">全部分组</option></select>
       <select id="watch-tag" aria-label="按标签筛选评论监控" onchange="onWatchFilter()"><option value="">全部标签</option></select>
       <span class="filter-count" id="watch-filter-count" role="status" aria-live="polite"></span>
-      <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span><div class="export-actions" role="group" aria-label="评论监控 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('comment-watches', false, this)" title="按当前筛选条件导出全部匹配记录" aria-label="导出评论监控筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button><button type="button" class="export-btn full" onclick="exportModuleReport('comment-watches', true, this)" title="忽略本模块筛选，导出当前平台全部记录" aria-label="导出评论监控全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button></div></div>
+      <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span><div class="export-actions" role="group" aria-label="评论监控 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('comment-watches', false, this)" title="导出当前条件下的全部匹配记录" aria-label="导出评论监控当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button><button type="button" class="export-btn full" onclick="exportModuleReport('comment-watches', true, this)" title="导出当前平台全部记录" aria-label="导出评论监控全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button></div></div>
       </div>
       <div class="table-wrap"><table aria-label="评论监控列表"><thead><tr>
         <th>对象</th><th>分组 / 标签</th><th>类型</th><th>来源</th><th>评论数</th><th>间隔</th><th>上次扫描</th><th>状态</th><th>操作</th>
@@ -2391,7 +2913,7 @@
         </select>
         <span class="filter-count" id="comment-filter-count" role="status" aria-live="polite"></span>
         <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span>
-          <div class="export-actions" role="group" aria-label="评论数据 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('comments', false, this)" title="按当前筛选条件导出全部匹配记录" aria-label="导出评论数据筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button><button type="button" class="export-btn full" onclick="exportModuleReport('comments', true, this)" title="忽略本模块筛选，导出当前平台全部记录" aria-label="导出评论数据全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button></div>
+          <div class="export-actions" role="group" aria-label="评论数据 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('comments', false, this)" title="导出当前条件下的全部匹配记录" aria-label="导出评论数据当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button><button type="button" class="export-btn full" onclick="exportModuleReport('comments', true, this)" title="导出当前平台全部记录" aria-label="导出评论数据全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button></div>
           <button class="ghost sm" id="comment-selall-btn" onclick="commentSelAllToggle()">全选</button>
           <span class="mut" id="comment-selcount" style="display:none">已选 0</span>
           <button class="sm danger" id="comment-batchbtn" style="display:none" onclick="commentBatchDelete()"><svg><use href="#i-trash"/></svg>批量删除</button>
@@ -2497,10 +3019,10 @@
       </div>
       <div class="manage-toolbar">
         <input type="search" id="danmaku-watch-search" placeholder="搜索对象或别名" aria-label="搜索弹幕监控" oninput="renderDanmakuWatchRows()">
-        <select id="danmaku-watch-group" onchange="renderDanmakuWatchRows()"><option value="">全部分组</option></select>
-        <select id="danmaku-watch-tag" onchange="renderDanmakuWatchRows()"><option value="">全部标签</option></select>
+        <select id="danmaku-watch-group" aria-label="按分组筛选弹幕监控" onchange="renderDanmakuWatchRows()"><option value="">全部分组</option></select>
+        <select id="danmaku-watch-tag" aria-label="按标签筛选弹幕监控" onchange="renderDanmakuWatchRows()"><option value="">全部标签</option></select>
         <span class="filter-count" id="danmaku-watch-filter-count"></span>
-        <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span><div class="export-actions" role="group" aria-label="弹幕监控 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('danmaku-watches', false, this)" title="按当前筛选条件导出全部匹配记录" aria-label="导出弹幕监控筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button><button type="button" class="export-btn full" onclick="exportModuleReport('danmaku-watches', true, this)" title="忽略本模块筛选，导出当前平台全部记录" aria-label="导出弹幕监控全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button></div></div>
+        <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span><div class="export-actions" role="group" aria-label="弹幕监控 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('danmaku-watches', false, this)" title="导出当前条件下的全部匹配记录" aria-label="导出弹幕监控当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button><button type="button" class="export-btn full" onclick="exportModuleReport('danmaku-watches', true, this)" title="导出当前平台全部记录" aria-label="导出弹幕监控全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button></div></div>
       </div>
       <div class="table-wrap"><table aria-label="弹幕监控列表"><thead><tr>
         <th>对象</th><th>类型</th><th>来源</th><th>弹幕数</th><th>间隔</th><th>上次扫描</th><th>状态</th><th>操作</th>
@@ -2513,7 +3035,7 @@
         <h2>抓到的弹幕</h2>
       </div>
       <div class="manage-toolbar">
-        <select id="danmaku-src" onchange="onDanmakuSrc()"><option value="">全部来源</option></select>
+        <select id="danmaku-src" aria-label="按来源筛选弹幕" onchange="onDanmakuSrc()"><option value="">全部来源</option></select>
         <input id="danmaku-query" type="search" placeholder="筛选文本 / 用户 ID" aria-label="筛选弹幕文本或用户" oninput="refreshDanmaku(true)">
         <input id="danmaku-time-start" type="number" min="0" step="0.1" placeholder="起点秒" aria-label="视频内起点秒" onchange="refreshDanmaku(true)">
         <input id="danmaku-time-end" type="number" min="0" step="0.1" placeholder="终点秒" aria-label="视频内终点秒" onchange="refreshDanmaku(true)">
@@ -2523,7 +3045,7 @@
         </select>
         <span class="filter-count" id="danmaku-filter-count" role="status" aria-live="polite"></span>
         <div class="toolbar-actions"><span class="toolbar-actions-label">操作</span>
-          <div class="export-actions" role="group" aria-label="弹幕数据 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('danmaku', false, this)" title="按当前筛选条件导出全部匹配记录" aria-label="导出弹幕数据筛选结果"><svg aria-hidden="true"><use href="#i-filter"/></svg>导出筛选</button><button type="button" class="export-btn full" onclick="exportModuleReport('danmaku', true, this)" title="忽略本模块筛选，导出当前平台全部记录" aria-label="导出弹幕数据全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>导出全量</button></div>
+          <div class="export-actions" role="group" aria-label="弹幕数据 Excel 导出"><span class="export-caption" title="导出当前模块数据"><svg aria-hidden="true"><use href="#i-download"/></svg>Excel</span><button type="button" class="export-btn filtered" onclick="exportModuleReport('danmaku', false, this)" title="导出当前条件下的全部匹配记录" aria-label="导出弹幕数据当前结果"><svg aria-hidden="true"><use href="#i-download"/></svg>当前结果</button><button type="button" class="export-btn full" onclick="exportModuleReport('danmaku', true, this)" title="导出当前平台全部记录" aria-label="导出弹幕数据全部数据"><svg aria-hidden="true"><use href="#i-download"/></svg>全部数据</button></div>
           <button class="ghost sm danger" onclick="clearDanmaku()"><svg><use href="#i-trash"/></svg>清空弹幕</button>
         </div>
       </div>
@@ -2597,10 +3119,31 @@
 
       <div data-hubpanel="dm" style="display:none">
         <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">
-          <div class="hint" style="margin:0;flex:1"><span class="ic-text"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>抖音私信</b></span>：点「<b>同步</b>」拉取会话列表，打开会话后自动加载完整聊天记录。发消息使用「<b>打开浏览器收发</b>」。小红书网页端暂未开放私信，快手能力待验证。</div>
+          <div class="hint" style="margin:0;flex:1"><span class="ic-text"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>网页私信</b></span>：抖音与小红书均可同步会话和历史。小红书复用账号 Chrome 的原生实时推送，并以低频检查补偿漏推；自动回复默认先生成待审核草稿。</div>
           <button class="ghost sm" style="flex:0 0 auto" onclick="syncDm()"><svg><use href="#i-download"/></svg>同步</button>
           <button style="flex:0 0 auto" onclick="openHubAccountBrowser()"><svg><use href="#i-send"/></svg>打开浏览器收发</button>
         </div>
+        <details class="dm-auto" id="dm-auto-panel">
+          <summary>自动回复规则与待审核回复</summary>
+          <div class="hint" style="margin-top:8px">仅处理建立监控基线后收到的新消息。默认先生成草稿；自动发送仍受活跃时段、15 分钟私信间隔、小时/每日配额和风险冷却控制。</div>
+          <div class="hint" id="dm-monitor-status" style="margin-top:8px">正在读取账号级实时监听状态…</div>
+          <div class="dm-auto-grid">
+            <label>规则名称<input id="dm-rule-name" value="常用问询"></label>
+            <label>关键词（逗号分隔）<input id="dm-rule-keywords" placeholder="价格,合作,购买"></label>
+            <label>回复模板（每行一条）<textarea id="dm-rule-templates" rows="2" placeholder="你好 {nickname}，已收到你的消息，我们稍后回复。"></textarea></label>
+            <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+              <label style="flex-direction:row"><input id="dm-rule-auto" type="checkbox">免审核自动发送</label>
+              <button class="sm" onclick="saveDmRule()">新增规则</button>
+            </div>
+            <label>排除词（逗号分隔）<input id="dm-rule-excludes" placeholder="停止,不要联系"></label>
+            <label>最短延迟（秒）<input id="dm-rule-delay-min" type="number" min="15" max="3600" value="75"></label>
+            <label>最长延迟（秒）<input id="dm-rule-delay-max" type="number" min="15" max="7200" value="300"></label>
+            <label>同会话冷却（小时）<input id="dm-rule-cooldown" type="number" min="1" max="168" value="6"></label>
+          </div>
+          <div class="dm-auto-rules" id="dm-auto-rules"></div>
+          <div style="font-weight:650;margin-top:12px">待审核回复</div>
+          <div class="dm-auto-tasks" id="dm-auto-tasks"></div>
+        </details>
         <div class="dm-wrap">
           <div class="dm-list" id="dm-convs"></div>
           <div class="dm-main">
@@ -2718,10 +3261,20 @@
     <h2 id="ui-title">选择</h2>
     <div class="mut" id="ui-hint" style="font-size:12px;margin:-8px 0 14px;white-space:pre-line"></div>
     <div id="ui-body" class="stack"></div>
-    <div class="row" style="justify-content:flex-end;margin-top:16px">
+    <div class="row" id="ui-actions" style="justify-content:flex-end">
       <button class="ghost" onclick="uiModalCancel()" style="flex:0 0 auto">取消</button>
       <button id="ui-ok" onclick="uiModalOk()" style="flex:0 0 auto"><svg><use href="#i-check"/></svg>确定</button>
     </div>
+  </div>
+</div>
+
+<div id="risk-event-modal" class="pv-overlay" style="display:none" role="dialog" aria-modal="true"
+     aria-labelledby="risk-event-title" onclick="if(event.target.id==='risk-event-modal')hideRiskEvents()">
+  <div class="rp-box" style="width:min(94vw,840px);max-height:88vh;display:flex;flex-direction:column">
+    <button class="pv-close" onclick="hideRiskEvents()" aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+    <h2 id="risk-event-title">风险事件</h2>
+    <div class="mut" id="risk-event-subtitle" style="font-size:12px;margin:-8px 0 12px">最近事件</div>
+    <div class="risk-event-list" id="risk-event-list"></div>
   </div>
 </div>
 

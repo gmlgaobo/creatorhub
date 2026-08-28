@@ -2,20 +2,20 @@
 
 > 本地运行的多平台内容管理面板，支持 **抖音 / 小红书 / 快手 / 视频号**。
 
-[在线预览](https://3441293738.github.io/creatorhub/) · [快速开始](#快速开始) · [平台能力](#平台能力)
+[在线预览](https://3441293738.github.io/creatorhub/) · [快速开始](#快速开始) · [平台能力](#平台能力) · [基本使用](#基本使用) · [配置](#配置) · [常见问题](#常见问题) · [交流群](#交流群)
 
 > 在线预览由 GitHub Pages 提供，使用脱敏示例数据，仅展示界面与交互；登录、抓取、下载和发布仍需在本地运行。
 
 CreatorHub 使用 Python + FastAPI 提供统一 Web 界面，用于管理账号、监控作品与评论、下载内容、发布作品和接收通知。账号登录态、数据库及媒体文件均保存在本地。
 
-浏览器自动化由免费开源的 [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) 驱动；业务层继续使用兼容的 Playwright API，现有账号 Profile 和登录态目录结构保持不变。
+浏览器交互按平台使用系统 Chrome CDP 或免费开源的 [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)，业务层统一使用兼容的 Playwright API。每个账号使用独立的浏览器 Profile，Cookie、缓存和本地存储互不共享。
 
 ## 平台能力
 
 | 功能 | 抖音 | 小红书 | 快手 | 视频号 |
 |---|:---:|:---:|:---:|:---:|
-| 登录 | 扫码 / 创作者 / Cookie | 扫码 | 扫码 / 创作者 | 扫码 |
-| 关键词批量采集 | ✅ 作品 / 评论 / 媒体 | 下版本 | — | — |
+| 登录 | 扫码 / 创作者 / Cookie | 扫码 / 创作者 | 扫码 / 创作者 | 扫码 |
+| 关键词批量采集 | ✅ 作品 / 评论 / 媒体 | 规划中 | — | — |
 | 作品监控 | ✅ | ✅ 创作者 / 关键词 | ✅ | 仅本账号 |
 | 评论监控 | ✅ | ✅ | ✅ | 仅本账号 |
 | 短视频弹幕监控 | ✅ 播放页 / 创作中心 | — | — | — |
@@ -67,6 +67,8 @@ http://127.0.0.1:8000
 
 > **小红书登录建议：** 尽量使用本机系统中已安装的稳定版 Google Chrome。CreatorHub 会优先通过 CDP 启动系统 Chrome，并为每个账号使用独立的持久化 Profile，不会读取或复用个人 Chrome 的日常 Profile；未安装 Chrome 时会自动回退到可见的 Patchright Chromium。
 
+需要后台服务、局域网 HTTPS、托盘桌面代理、加密备份和安装包更新的部署方式，请参阅 [Windows 一体化版](WINDOWS_INSTALLER.md)。该版本仍要求安装主机提供系统 Chrome；扫码、验证和其他可见浏览器窗口只会在安装主机显示。
+
 常用命令：
 
 ```bash
@@ -115,24 +117,24 @@ npm install
 
 ### 更多界面
 
-> 点击缩略图可查看完整尺寸。
+> 截图统一为 1600 × 1000，点击可查看高清原图。
 
 <table>
   <tr>
-    <td width="50%"><strong>小红书浅色主题</strong><br><a href="assets/screenshots/overview-xiaohongshu.png"><img src="assets/screenshots/overview-xiaohongshu.png" alt="小红书总览面板"></a></td>
-    <td width="50%"><strong>账号与代理</strong><br><a href="assets/screenshots/accounts-proxy.png"><img src="assets/screenshots/accounts-proxy.png" alt="账号登录与代理池"></a></td>
+    <td width="50%" align="center" valign="top"><strong>小红书浅色主题</strong><br><a href="assets/screenshots/overview-xiaohongshu.png"><img src="assets/screenshots/overview-xiaohongshu.png" alt="小红书总览面板" width="100%"></a></td>
+    <td width="50%" align="center" valign="top"><strong>账号与代理</strong><br><a href="assets/screenshots/accounts-proxy.png"><img src="assets/screenshots/accounts-proxy.png" alt="账号登录与代理池" width="100%"></a></td>
   </tr>
   <tr>
-    <td width="50%"><strong>作品监控</strong><br><a href="assets/screenshots/monitor-posts.png"><img src="assets/screenshots/monitor-posts.png" alt="作品监控与下载"></a></td>
-    <td width="50%"><strong>评论监控</strong><br><a href="assets/screenshots/monitor-comments.png"><img src="assets/screenshots/monitor-comments.png" alt="评论监控"></a></td>
+    <td width="50%" align="center" valign="top"><strong>作品监控</strong><br><a href="assets/screenshots/monitor-posts.png"><img src="assets/screenshots/monitor-posts.png" alt="作品监控与下载" width="100%"></a></td>
+    <td width="50%" align="center" valign="top"><strong>评论监控</strong><br><a href="assets/screenshots/monitor-comments.png"><img src="assets/screenshots/monitor-comments.png" alt="评论监控" width="100%"></a></td>
   </tr>
   <tr>
-    <td width="50%"><strong>内容发布</strong><br><a href="assets/screenshots/publish-workflow.png"><img src="assets/screenshots/publish-workflow.png" alt="内容发布与任务队列"></a></td>
-    <td width="50%"><strong>链接下载</strong><br><a href="assets/screenshots/share-download.png"><img src="assets/screenshots/share-download.png" alt="分享链接解析与下载历史"></a></td>
+    <td width="50%" align="center" valign="top"><strong>内容发布</strong><br><a href="assets/screenshots/publish-workflow.png"><img src="assets/screenshots/publish-workflow.png" alt="内容发布与任务队列" width="100%"></a></td>
+    <td width="50%" align="center" valign="top"><strong>链接下载</strong><br><a href="assets/screenshots/share-download.png"><img src="assets/screenshots/share-download.png" alt="分享链接解析与下载历史" width="100%"></a></td>
   </tr>
   <tr>
-    <td width="50%"><strong>自动评论</strong><br><a href="assets/screenshots/autocomment-rules.png"><img src="assets/screenshots/autocomment-rules.png" alt="自动评论规则与任务记录"></a></td>
-    <td width="50%"><strong>本账号管理与私信</strong><br><a href="assets/screenshots/account-hub-dm.png"><img src="assets/screenshots/account-hub-dm.png" alt="本账号数据与私信管理"></a></td>
+    <td width="50%" align="center" valign="top"><strong>自动评论</strong><br><a href="assets/screenshots/autocomment-rules.png"><img src="assets/screenshots/autocomment-rules.png" alt="自动评论规则与任务记录" width="100%"></a></td>
+    <td width="50%" align="center" valign="top"><strong>本账号管理与私信</strong><br><a href="assets/screenshots/account-hub-dm.png"><img src="assets/screenshots/account-hub-dm.png" alt="本账号数据与私信管理" width="100%"></a></td>
   </tr>
 </table>
 
@@ -149,7 +151,7 @@ npm install
 
 ### 2. 监控与下载
 
-- **关键词批量采集**：当前版本先支持抖音；一次输入最多 20 个关键词，设置每词作品数、每作品评论数、是否包含二级评论及是否下载媒体；已结束任务支持编辑配置、保留结果去重续跑和 Excel 导出。小红书关键词采集安排在下个版本。
+- **关键词批量采集**：当前仅支持抖音；一次输入最多 20 个关键词，设置每词作品数、每作品评论数、是否包含二级评论及是否下载媒体；已结束任务支持编辑配置、保留结果去重续跑和 Excel 导出。小红书关键词批量采集尚在规划中。
 - **作品监控**：添加创作者主页、作品链接、短链或平台 ID，发现新作品后自动入库。
 - **评论监控**：可订阅单条作品，也可监控账号近期作品的评论。
 - **短视频弹幕监控**：独立于评论区，按视频内时间轴渐进探测并排序；支持时间范围、关键词、文本长度、点赞数和容量上限过滤，记录持久化到 SQLite；自己的视频走创作中心，公开视频走播放器拦截。
@@ -166,23 +168,108 @@ npm install
 - 抖音、快手和视频号通过对应创作平台发布。
 - 已下载的抖音作品可转发到小红书或视频号，小红书作品可转发到抖音；发布前可修改标题、正文和话题。
 
-### 小红书独立 Chrome CDP 模式
-
-- 默认 `xhs_browser_mode: auto`：每个小红书账号启动一个独立、可见的系统 Chrome CDP 会话，并长期复用该账号自己的 Profile、Cookie、缓存和本地存储。
-- 项目专用 Profile 与用户平时打开 Chrome 使用的默认 Profile 完全分开；请勿同时用其他 Chrome 进程打开项目的账号 Profile。
-- 页面任务加载完整的图片、字体和媒体资源；搜索、滚动、输入、发布和评论统一走可见页面控件，且整台机器同一时刻只执行一个小红书可见操作。
-- 机器未安装稳定版 Chrome 时，`auto` 会回退到可见的 Patchright Chromium；账号列表会显示实际后端和回退原因。`cdp` 为严格模式，Chrome 缺失或 Profile 冲突时直接报错。
-- 账号代理支持 HTTP、HTTPS、SOCKS5 及账号密码认证。代理不可连接或认证失败时按失败关闭处理，不会静默改走本机直连；建议同一账号长期保持稳定出口。
-- 小红书发布和评论默认使用 `browser` 页面模式。提交按钮只点击一次；提交后若浏览器连接中断或缺少成功证据，任务会标记为“结果待确认”，不会自动重试，需先到平台核对。
-- 如需绕过系统 Chrome CDP，可显式设置 `xhs_browser_mode: patchright`。旧配置值 `playwright` 会自动迁移为 `patchright`。
-
 ### 4. 本账号与通知
 
 - 「本账号」中可同步自己的作品、关注、粉丝和私信，具体能力因平台而异。
+- 小红书普通账号可通过新版 Web `/chat` 同步会话与消息；后台按正向随机间隔低频检查，首次启用只建立消息游标，不处理历史积压。
+- 私信自动回复支持关键词、排除词、多模板、回复冷却和最大消息年龄。默认生成待审核草稿；选择免审核后也会经过活跃时段、统一写间隔、小时/每日上限及风险冷却。
+- 自动回复只使用账号自己的可见 Chrome 会话和页面输入框，不拼装签名请求；提交结果不确定时不会自动重试。
+- 私信同步、打开会话与发送复用每个账号唯一的后台工作标签页；Chrome 默认最小化启动，不会为每次操作新建或抢占前台窗口。点击“打开浏览器收发”时才主动恢复到前台。
 - 可启用作品健康监控，对零播放、违规或下架状态发送提醒。
 - 通知渠道支持 Bark、钉钉和 Telegram。
 
 > 自动评论、回复、私信及关注操作受平台风控影响，建议低频使用。
+
+## 浏览器环境与账号隔离
+
+### 小红书系统 Chrome CDP
+
+- 默认 `xhs_browser_mode: auto`：每个小红书账号启动一个独立、可见的系统 Chrome CDP 会话，并长期复用该账号自己的 Profile、Cookie、缓存和本地存储。
+- 项目专用 Profile 与用户平时打开 Chrome 使用的默认 Profile 完全分开；请勿同时用其他 Chrome 进程打开项目的账号 Profile。
+- 页面任务加载完整的图片、字体和媒体资源；搜索、滚动、输入、发布和评论统一走可见页面控件，且整台机器同一时刻只执行一个小红书可见操作。
+- 同一轮搜索与笔记详情复用账号现有浏览器进程和 Profile，不再每条笔记重新启动内核；页面停留时间会按可见内容长度做有界抖动，滚动、输入、详情间隔和阶段性休息采用有限随机节奏。默认单轮详情量也会在较小范围内变化，显式配置“单轮上限”时仍严格按用户上限执行。
+- 机器未安装稳定版 Chrome 时，`auto` 会回退到可见的 Patchright Chromium；账号列表会显示实际后端和回退原因。`cdp` 为严格模式，Chrome 缺失或 Profile 冲突时直接报错。
+- 账号代理支持 HTTP、HTTPS、SOCKS5 及账号密码认证。代理不可连接或认证失败时按失败关闭处理，不会静默改走本机直连；建议同一账号长期保持稳定出口。
+- 小红书发布和评论默认使用 `browser` 页面模式。提交按钮只点击一次；提交后若浏览器连接中断或缺少成功证据，任务会标记为“结果待确认”，不会自动重试，需先到平台核对。
+- 如需直接使用 Patchright，可显式设置 `xhs_browser_mode: patchright`。旧配置值 `playwright` 会自动迁移为 `patchright`。
+
+### 可选：Fingerprint Chromium 开源内核（小红书除外）
+
+CreatorHub 可以把开源的
+[`fingerprint-chromium`](https://github.com/adryfish/fingerprint-chromium)
+作为其他平台的可插拔 Chromium 运行时。账号、Profile、Cookie、代理、LRU 和风控仍由
+CreatorHub 管理，不需要外部商业浏览器或云端账号。小红书始终使用系统 Chrome/CDP：
+第三方指纹内核与既有 Profile 混用容易造成 UA/Client Hints、GPU 和站点持久状态不一致，
+从而增加设备安全验证；后端、登录接口和账号设置页都会拒绝该组合。
+
+1. 从上游 Release 下载适合当前系统的构建并自行校验文件。
+2. 在账号页的「浏览器内核」区域扫描安装目录，或手动添加当前机器上的
+   `chrome.exe` / `chrome`。每台机器单独保存本机路径，不依赖固定盘符。
+3. 也可以在 `config.yaml` 中配置单个内核或多内核扫描根目录：
+
+```yaml
+engine:
+  browser_backend: local
+  fingerprint_chromium_path: D:/path/to/fingerprint-chromium/chrome.exe
+  fingerprint_chromium_root: D:/path/to/browser-kernels
+  fingerprint_chromium_allow_headless: false
+  fingerprint_chromium_platform: auto
+```
+
+4. 重启 CreatorHub，在账号的「环境」设置中选择具体内核版本。
+   `browser_backend: fingerprint_chromium` 可以将默认指纹内核应用到所有未单独
+   指定环境的非小红书账号；小红书仍固定走系统 Chrome/CDP。
+
+添加新的非小红书账号时，选择具体 Fingerprint Chromium 内核和代理后，会在浏览器首次启动前
+打开「登录前指纹配置」。语言、时区、位置和窗口可继续跟随出口 IP 自动生成，也可切换
+为自定义；操作系统、浏览器品牌、CPU、WebGL、Canvas、WebRTC 和附加参数同样可编辑。
+登录成功后，这套配置与该账号的独立 Profile 一起持久化，后续仍可通过账号行的「指纹」
+按钮修改。
+
+该后端使用账号现有 `fp_seed` 生成稳定的 32 位内核指纹种子，并由浏览器内核
+统一处理 UA/Client Hints、Canvas、Audio、WebGL、语言和时区；CreatorHub 不会
+再叠加 `legacy` JavaScript 指纹脚本。默认强制使用有头窗口，因为上游说明无头模式
+只处理了部分无头特征。切换已有账号的浏览器环境会改变其设备画像，建议切换后重新
+检查登录态和代理出口。小红书登录和后续任务不会进入该分支，也不会在出现设备验证时
+自动刷新、跳转或重试；验证页会保留在可见系统 Chrome 窗口中供账号本人完成，期间
+自动任务保持暂停。
+
+每个新的指纹 Profile（以及内核、代理或指纹配置变化后的新环境）首次进入可见登录/
+账号浏览器时，会额外打开 `https://www.browserscan.net/zh` 体检标签，供用户核对实际
+IP、时区、WebRTC 与浏览器指纹。账号页的「环境检测」可以随时重新打开；页面显示的
+“已提示”只表示检测页已打开，不代表目标平台风控一定通过。BrowserScan 是第三方站点，
+会看到该环境的出口 IP 和浏览器特征。
+
+项目不捆绑上游浏览器二进制；升级浏览器时请先备份 `data/profiles/` 并在测试账号上
+验证兼容性。
+
+## 任务队列与平台风控
+
+Web 面板的「任务队列」统一展示采集、发布、自动评论、账号动作和下载任务，支持按平台、队列类型、状态和关键词筛选。默认启用 `risk_control.mode: conservative`，所有平台操作统一经过持久化调度与风控检查。
+
+### 默认策略
+
+- 同一账号的评论、账号动作、私信和发布共享写操作间隔与额度，立即执行也不会绕过冷却。
+- 使用同一网络出口的账号串行访问；未配置代理的账号统一归入 `direct` 出口组。
+- `conservative` 模式中的写间隔、小时/每日额度和同出口并发是不可放宽的保护线；配置 `0` 表示沿用保护线。切换为 `custom` 后才完全按自定义值执行。
+- 轻读取与重读取分别计时；命中 `403/429/461/471`、验证码或明确风控提示后，会按阶梯进入冷却。
+- 被额度、时段、代理状态或冷却拦下的任务保持 `pending`，服务重启后继续恢复；登录态失效时任务会保留并等待重新登录。
+- 冷却结束后先进行间隔式轻量探测，连续成功后再逐级恢复。
+
+### 浏览器与网络出口
+
+- 存量账号继续使用 `legacy` 浏览器画像，避免已有 Profile 漂移；新扫码与 Cookie 账号使用 `native` 模式。
+- `native` 账号的发布、评论、关注和私信会检查系统 Chrome、有头页面、独立 Profile 及代理出口基线。
+- 账号页的「测试代理」会记录出口 IP、国家、ASN 和时区；出口漂移或基线过期后，写任务保留在队列，重新验证后再执行。
+- 每个账号 Profile 都有跨进程占用保护；同一出口下多个账号集中触发风险时，会启用出口组熔断。
+
+### 风控中心与恢复
+
+「风控中心」集中展示正常、冷却、渐进恢复、登录失效、代理异常和网络熔断账号，并提供触发原因、冷却截止、恢复进度、任务级受阻原因、网络出口及事件时间线。规则页可调整读取间隔、冷却阶梯、恢复探测、写操作额度、出口组熔断和活跃时段；配置保存到本地数据库并立即生效。人工解除、规则修改和人工探测都会写入审计记录。
+
+服务暴露到局域网时，建议设置环境变量 `CREATORHUB_ADMIN_TOKEN`。设置后，风控规则保存、人工探测和解除接口必须携带管理口令；Web 风控中心可通过“设置管理口令”仅在当前浏览器会话中保存它。
+
+完整参数及保守默认值见 [`config.example.yaml`](config.example.yaml) 的 `risk_control` 段。
 
 ## 配置
 
@@ -201,9 +288,10 @@ engine:
 storage:
   db_path: ./data/creatorhub.db
 
-proxies: []
-  # - http://user:pass@host:port
-  # - socks5://user:pass@host:port
+proxies: []  # 不使用代理
+# proxies:
+#   - http://user:pass@host:port
+#   - socks5://user:pass@host:port
 ```
 
 完整配置及说明见 [`config.example.yaml`](config.example.yaml)。
@@ -228,40 +316,6 @@ python -m app.engine.share_downloader "完整分享文案或链接" -o ./data/me
 
 在 Web 面板中也可以直接使用「链接下载」。
 
-## 统一平台风控
-
-默认启用 `risk_control.mode: conservative`。它不会删除或关闭现有的登录、监控、下载、发布、评论、关注、取关和私信功能，而是把平台操作统一送入持久化闸门：
-
-- 同一账号的评论、账号动作、私信和发布共享写操作间隔与额度，立即执行也不会绕过冷却。
-- 使用同一网络出口的账号串行访问；未配置代理的账号统一归入 `direct` 出口组。
-- `conservative` 模式中的写间隔、小时/每日额度和同出口并发是不可放宽的保护线；配置 `0` 表示沿用保护线，而不是取消限制。切换为 `custom` 后才完全按自定义值执行。
-- 轻读取与重读取分别计时，评论区、弹幕、作品健康等重读取默认至少间隔 60 秒。
-- 命中 `403/429/461/471`、验证码或明确风控提示后，依次冷却 30 分钟、2 小时、6 小时和 24 小时。
-- 冷却结束后只放行间隔式轻量探测；连续 3 次成功才降低一级风险状态。
-- 被额度、时段、代理状态或冷却拦下的任务仍保持 `pending`，服务重启也会恢复中断的执行态。
-- 登录态失效时任务保留并等待重新登录；同一代理连续两次连接失败后会将账号和代理池条目标记为不可用。
-- 存量账号继续使用 `legacy` 浏览器画像，避免已有 profile 漂移；新扫码与 Cookie 账号使用 `native` 模式，不再注入自定义 UA、Client Hints、定位和指纹脚本。
-- `native` 账号的发布、评论、关注和私信统一经过写环境硬门禁：系统 Chrome、有头页面、独立 Profile，以及已配代理的浏览器出口基线必须全部正常。
-- 在账号页执行“测试代理”时，`native` 账号会由自身 BrowserContext 记录 IP/国家/ASN/时区；出口漂移或基线过期后写任务保留在队列，重新验证后再执行。
-- 每个账号 Profile 都有跨进程占用保护：Patchright 使用 `.browser.lock`，系统 Chrome CDP 使用带 PID/启动参数验证的 owner marker，防止多进程同时打开相同目录。同一出口下多个 `native` 账号在短时间内同时命中风险时，会触发出口组熔断。
-
-完整参数及保守默认值见 [`config.example.yaml`](config.example.yaml) 的 `risk_control` 段。
-
-## 常见问题
-
-| 问题 | 处理方式 |
-|---|---|
-| macOS 安装依赖时报 `command /usr/bin/clang++ failed with code 1` | 更新代码后删除旧的 `.venv`，再运行 `./start.sh install`；安装器会先升级 pip/setuptools/wheel。 |
-| Patchright 启动失败或找不到浏览器 | 运行 `python -m patchright install chromium` |
-| 扫码登录没有弹窗 | 确认当前机器有桌面环境；抖音也可使用 Cookie 登录 |
-| 小红书扫码登录出现设备安全验证 | 尽量安装或更新本机稳定版 Google Chrome，并保持同一账号的 Profile 和网络出口稳定；没有 Chrome 时项目会回退到 Patchright Chromium |
-| Windows 下出现 Patchright 子进程错误 | 使用单 worker 启动，不要添加 `--workers` |
-| 抓取不到作品或评论 | 检查登录态、目标链接和网络状态，必要时重新登录并降低频率 |
-| 小红书链接解析失败 | 重新复制包含有效 `xsec_token` 的完整链接 |
-| 仅音频仍得到 MP4，或视频没有声音/画质受限 | 重新运行安装命令更新依赖；也可安装系统 ffmpeg 并加入 `PATH` |
-
-仍有问题可提交 [Issue](https://github.com/3441293738/creatorhub/issues)，并附上平台、操作步骤和服务端错误日志。
-
 ## 数据目录
 
 ```text
@@ -272,6 +326,45 @@ data/
 ```
 
 备份项目前，建议一并备份 `config.yaml` 和 `data/`。
+
+## 常见问题
+
+| 问题 | 处理方式 |
+|---|---|
+| macOS 安装依赖时报 `command /usr/bin/clang++ failed with code 1` | 更新代码后删除旧的 `.venv`，再运行 `./start.sh install`；安装器会先升级 pip/setuptools/wheel。 |
+| Patchright 启动失败或找不到浏览器 | 运行 `python -m patchright install chromium` |
+| 扫码登录没有弹窗 | 确认当前机器有桌面环境；抖音也可使用 Cookie 登录 |
+| 小红书扫码登录出现设备安全验证 | 安装或更新本机稳定版 Google Chrome，并保持同一账号的 Profile 和网络出口稳定；验证页出现后自动任务会暂停且不刷新、不跳转、不自动重试，请在当前可见窗口按平台提示完成 |
+| Windows 下出现 Patchright 子进程错误 | 使用单 worker 启动，不要添加 `--workers` |
+| 抓取不到作品或评论 | 检查登录态、目标链接和网络状态，必要时重新登录并降低频率 |
+| 小红书链接解析失败 | 重新复制包含有效 `xsec_token` 的完整链接 |
+| 仅音频仍得到 MP4，或视频没有声音/画质受限 | 重新运行安装命令更新依赖；也可安装系统 ffmpeg 并加入 `PATH` |
+
+仍有问题可提交 [Issue](https://github.com/3441293738/creatorhub/issues)，并附上平台、操作步骤和服务端错误日志。
+
+## Star History
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/3441293738/creatorhub/star-history/assets/star-history-dark.svg">
+  <img alt="CreatorHub Star History Chart" src="https://raw.githubusercontent.com/3441293738/creatorhub/star-history/assets/star-history.svg">
+</picture>
+
+## 使用须知
+
+本项目用于技术学习和个人内容管理，不提供账号、Cookie、代理或平台数据。使用时请遵守目标平台规则及所在地法律法规，并尊重内容版权和个人隐私。
+## 交流群
+
+欢迎加入 **CreatorHub 交流群**，交流使用经验、问题反馈和功能建议。
+
+<p align="center">
+  <a href="https://3441293738.github.io/creatorhub/community/">
+    <img src="assets/community/live-entry.png" alt="CreatorHub 交流群固定入口二维码" width="280">
+  </a>
+</p>
+
+<p align="center">
+  扫码或点击二维码打开<a href="https://3441293738.github.io/creatorhub/community/">交流群固定入口</a>；微信群二维码到期后会在入口页更新。
+</p>
 
 ## 赞助商
 
@@ -292,7 +385,3 @@ data/
 ## 友链
 
 - [LINUX DO](https://linux.do/) — 感谢社区提供的帮助与支持。
-
-## 使用说明
-
-本项目用于技术学习和个人内容管理，不提供账号、Cookie、代理或平台数据。使用时请遵守目标平台规则及所在地法律法规，并尊重内容版权和个人隐私。

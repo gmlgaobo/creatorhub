@@ -44,10 +44,35 @@ class EngineConfig:
     # ── 多账号风控隔离 ──
     profiles_dir: str = "./data/profiles"   # 每账号持久化浏览器 profile 根目录
     max_live_contexts: int = 6              # 同时常驻的浏览器 context 上限(LRU 驱逐,控内存)
+    # 全局浏览器运行时；账号可用 browser_backend 单独覆盖。
+    browser_backend: str = "local"          # local | fingerprint_chromium
+    fingerprint_chromium_path: str = ""     # 开源 fingerprint-chromium 的 chrome/chrome.exe
+    fingerprint_chromium_root: str = ""     # 多内核扫描根目录；递归发现 chrome/chrome.exe
+    fingerprint_chromium_allow_headless: bool = False  # 上游无头画像不完整，默认强制有头
+    fingerprint_chromium_platform: str = "auto"       # auto | windows | linux | macos
     # 小红书浏览器:默认优先连接 CreatorHub 管理的每账号系统 Chrome CDP。
     xhs_browser_mode: str = "auto"          # auto | cdp | patchright
-    xhs_cdp_idle_seconds: int = 900          # 0=仅按 LRU、显式关闭或程序退出回收
+    # 账号浏览器默认常驻并复用同一 Profile/任务页；空闲后统一回收。旧配置
+    # xhs_cdp_idle_seconds 仍兼容，0 表示仅按 LRU、显式关闭或退出回收。
+    resident_browser_sessions: bool = True
+    browser_session_idle_seconds: int = 1800
+    xhs_cdp_idle_seconds: int | None = None
+    # 小红书读取默认也走账号浏览器页面，避免扫码 Cookie 在浏览器与签名直连
+    # 客户端之间切换 UA/TLS/Client-Hints。api 只保留为显式兼容模式。
+    xhs_read_mode: str = "browser"           # browser | api
+    xhs_keyword_gap_seconds: float = 10.0    # 同一任务相邻关键词的最小停顿
+    xhs_item_gap_seconds: float = 2.5         # 相邻详情/评论读取的最小停顿
+    xhs_request_jitter: float = 0.35          # 上述停顿的正向随机抖动比例
     xhs_publish_mode: str = "browser"       # browser | api(API 仅为显式兼容模式)
+    # 小红书 Web 私信。监控只读；命中规则后仍进入统一 DM 限速队列。
+    xhs_dm_monitor_enabled: bool = False
+    xhs_dm_poll_interval_seconds: int = 120
+    xhs_dm_realtime_enabled: bool = True
+    xhs_dm_realtime_debounce_seconds: float = 1.5
+    xhs_dm_fallback_interval_seconds: int = 600
+    xhs_dm_max_conversations_per_poll: int = 2
+    xhs_dm_poll_jitter: float = 0.35
+    xhs_dm_auto_reply_enabled: bool = False
     active_accounts: int = 3                # 同一时刻最多并发活跃的账号数(错峰)
     scan_jitter: float = 0.15              # 扫描间隔随机抖动比例(±15%),消除整点齐发特征
     route_download_via_proxy: bool = True   # 媒体下载是否走账号代理(避免 CDN 拉流暴露真实 IP)
@@ -155,6 +180,45 @@ def load_config(path: str | None = None) -> Config:
                                      if k in EngineConfig.__dataclass_fields__})
         if cfg.engine.xhs_browser_mode == "playwright":
             cfg.engine.xhs_browser_mode = "patchright"
+        xhs_read_mode = str(
+            cfg.engine.xhs_read_mode or "browser").strip().lower()
+        cfg.engine.xhs_read_mode = (
+            xhs_read_mode if xhs_read_mode in {"browser", "api"}
+            else "browser")
+        cfg.engine.xhs_keyword_gap_seconds = max(
+            0.0, float(cfg.engine.xhs_keyword_gap_seconds))
+        cfg.engine.xhs_item_gap_seconds = max(
+            0.0, float(cfg.engine.xhs_item_gap_seconds))
+        cfg.engine.xhs_request_jitter = min(
+            1.0, max(0.0, float(cfg.engine.xhs_request_jitter)))
+        cfg.engine.xhs_dm_poll_interval_seconds = max(
+            30, int(cfg.engine.xhs_dm_poll_interval_seconds))
+        cfg.engine.xhs_dm_realtime_debounce_seconds = min(
+            10.0, max(0.3, float(cfg.engine.xhs_dm_realtime_debounce_seconds)))
+        cfg.engine.xhs_dm_fallback_interval_seconds = max(
+            120, int(cfg.engine.xhs_dm_fallback_interval_seconds))
+        cfg.engine.xhs_dm_max_conversations_per_poll = max(
+            1, min(10, int(cfg.engine.xhs_dm_max_conversations_per_poll)))
+        cfg.engine.xhs_dm_poll_jitter = min(
+            1.0, max(0.0, float(cfg.engine.xhs_dm_poll_jitter)))
+        cfg.engine.browser_session_idle_seconds = max(
+            0, int(cfg.engine.browser_session_idle_seconds))
+        if cfg.engine.xhs_cdp_idle_seconds is not None:
+            cfg.engine.xhs_cdp_idle_seconds = max(
+                0, int(cfg.engine.xhs_cdp_idle_seconds))
+        backend = str(cfg.engine.browser_backend or "local").strip().lower()
+        cfg.engine.browser_backend = (
+            backend if backend in {"local", "fingerprint_chromium"}
+            else "local"
+        )
+        fingerprint_platform = str(
+            cfg.engine.fingerprint_chromium_platform or "auto"
+        ).strip().lower()
+        cfg.engine.fingerprint_chromium_platform = (
+            fingerprint_platform
+            if fingerprint_platform in {"auto", "windows", "linux", "macos"}
+            else "auto"
+        )
         risk = raw.get("risk_control", {}) or {}
         risk_values = {
             k: v for k, v in risk.items()

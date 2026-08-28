@@ -33,6 +33,14 @@ function _barSync() {
 const api = async (path, opts) => {
   _apiActive++; _barSync();
   try {
+    opts = { ...(opts || {}) };
+    const headers = new Headers(opts.headers || {});
+    try {
+      const adminToken = sessionStorage.getItem("creatorhub-risk-admin-token") || "";
+      if (adminToken) headers.set("X-CreatorHub-Admin-Token", adminToken);
+    } catch (e) {}
+    headers.set("X-CreatorHub-Actor", "creatorhub-web");
+    opts.headers = headers;
     const r = await fetch(path, opts);
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.status); }
     return await r.json();
@@ -199,11 +207,14 @@ function _uiClose(val) {
 }
 function _uiKey(e) {
   if (e.key === "Escape") uiModalCancel();
-  else if (e.key === "Enter" && document.activeElement && document.activeElement.tagName !== "TEXTAREA") uiModalOk();
+  else if (e.key === "Enter" && document.activeElement
+      && !["TEXTAREA", "BUTTON"].includes(document.activeElement.tagName)) uiModalOk();
 }
 function uiModalCancel() { _uiClose(_uiCancelVal); }
 function uiModalOk() { _uiClose(_uiGetVal ? _uiGetVal() : ""); }
 function _uiOpen(title, hint, { okText = "确定", danger = false, wide = false } = {}) {
+  const previousExtraAction = $("ui-extra-action");
+  if (previousExtraAction) previousExtraAction.remove();
   $("ui-title").textContent = title || "";
   $("ui-hint").textContent = hint || "";
   const ok = $("ui-ok");
@@ -243,18 +254,28 @@ function uiSelect({ title, hint, options, value }) {
   });
 }
 // 文本输入(单行或多行)。返回字符串或 null(取消)
-function uiPrompt({ title, hint, value, placeholder, multiline, rows }) {
+function uiPrompt({ title, hint, value, placeholder, multiline, rows, secret = false }) {
   return new Promise(res => {
     _uiResolve = res; _uiCancelVal = null;
     _uiGetVal = () => { const el = $("ui-body").querySelector("select,input,textarea"); return el ? el.value : ""; };
     $("ui-body").innerHTML = multiline
       ? `<textarea id="ui-inp" rows="${rows || 6}" placeholder="${esc(placeholder || "")}">${esc(value || "")}</textarea>`
-      : `<input id="ui-inp" value="${esc(value || "")}" placeholder="${esc(placeholder || "")}">`;
+      : `<input id="ui-inp" type="${secret ? "password" : "text"}" value="${esc(value || "")}" placeholder="${esc(placeholder || "")}" autocomplete="${secret ? "current-password" : "off"}">`;
     _uiOpen(title, hint);
   });
 }
 
 // ─── 自定义下拉:渐进增强原生 <select>(美化展开列表)───
+// 弹层挂到 body 以避开卡片 overflow；Tab 时显式回到文档顺序，避免焦点落到 body 末尾。
+let _openSelectClose = null;
+function focusAdjacentControl(origin, backwards = false) {
+  const nodes = [...document.querySelectorAll(
+    'button:not([disabled]),a[href],input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+  )].filter(node => node.offsetParent !== null && !node.classList.contains("cs-native") && !node.classList.contains("dt-native") && !node.closest(".cs-panel,.dt-panel"));
+  const index = nodes.indexOf(origin);
+  const next = nodes[index + (backwards ? -1 : 1)];
+  if (next) requestAnimationFrame(() => next.focus({ preventScroll: true }));
+}
 function enhanceSelect(sel) {
   if (sel.dataset.cs) return;
   sel.dataset.cs = "1";
@@ -284,7 +305,7 @@ function enhanceSelect(sel) {
     labelEl.addEventListener("click", e => { e.preventDefault(); trg.focus(); });
   } else trg.setAttribute("aria-label", selectLabel.trim());
   wrap.appendChild(trg);
-  let panel = null;
+  let panel = null, typeBuffer = "", typeTimer = null;
 
   function sync() {
     const o = sel.options[sel.selectedIndex];
@@ -295,6 +316,7 @@ function enhanceSelect(sel) {
   }
   function close() {
     if (panel) { panel.remove(); panel = null; }
+    if (_openSelectClose === close) _openSelectClose = null;
     wrap.classList.remove("open");
     trg.setAttribute("aria-expanded", "false");
     trg.removeAttribute("aria-controls");
@@ -303,8 +325,31 @@ function enhanceSelect(sel) {
     document.removeEventListener("mousedown", onDoc, true);
   }
   function onDoc(e) { if (!wrap.contains(e.target) && (!panel || !panel.contains(e.target))) close(); }
+  function choose(i) {
+    if (sel.selectedIndex !== i) {
+      sel.selectedIndex = i;
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    sync(); close(); trg.focus({ preventScroll: true });
+  }
+  function focusTyped(char) {
+    clearTimeout(typeTimer);
+    typeBuffer += char.toLocaleLowerCase();
+    typeTimer = setTimeout(() => { typeBuffer = ""; }, 650);
+    if (!panel) open(false);
+    requestAnimationFrame(() => {
+      if (!panel) return;
+      const options = [...panel.querySelectorAll('.cs-opt:not(.dis)')];
+      const from = Math.max(0, options.indexOf(document.activeElement) + 1);
+      const ordered = options.slice(from).concat(options.slice(0, from));
+      const target = ordered.find(option => option.textContent.trim().toLocaleLowerCase().startsWith(typeBuffer));
+      if (target) { target.focus(); target.scrollIntoView({ block: "nearest" }); }
+    });
+  }
   function open(focusSelected = false) {
     if (sel.disabled) return;
+    if (_openSelectClose && _openSelectClose !== close) _openSelectClose();
     panel = document.createElement("div");
     panel.className = "cs-panel";
     panel.id = `cs-panel-${sel.id || Math.random().toString(36).slice(2)}`;
@@ -313,15 +358,15 @@ function enhanceSelect(sel) {
     Array.from(sel.options).forEach((o, i) => {
       const it = document.createElement("div");
       it.className = "cs-opt" + (i === sel.selectedIndex ? " sel" : "") + (o.disabled ? " dis" : "");
-      it.textContent = o.textContent;
+      const optionLabel = document.createElement("span");
+      optionLabel.className = "cs-opt-label";
+      optionLabel.textContent = o.textContent;
+      it.appendChild(optionLabel);
       it.setAttribute("role", "option");
       it.setAttribute("aria-selected", i === sel.selectedIndex ? "true" : "false");
+      it.id = `${panel.id}-option-${i}`;
       it.tabIndex = o.disabled ? -1 : 0;
-      if (!o.disabled) it.addEventListener("mousedown", ev => {
-        ev.preventDefault();
-        if (sel.selectedIndex !== i) { sel.selectedIndex = i; sel.dispatchEvent(new Event("change", { bubbles: true })); }
-        sync(); close(); trg.focus();
-      });
+      if (!o.disabled) it.addEventListener("click", ev => { ev.preventDefault(); choose(i); });
       if (!o.disabled) it.addEventListener("keydown", ev => {
         const options = [...panel.querySelectorAll('.cs-opt:not(.dis)')];
         const index = options.indexOf(it);
@@ -331,23 +376,27 @@ function enhanceSelect(sel) {
         } else if (ev.key === "Home" || ev.key === "End") {
           ev.preventDefault(); options[ev.key === "Home" ? 0 : options.length - 1].focus();
         } else if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          if (sel.selectedIndex !== i) { sel.selectedIndex = i; sel.dispatchEvent(new Event("change", { bubbles: true })); }
-          sync(); close(); trg.focus();
-        } else if (ev.key === "Escape" || ev.key === "Tab") {
-          ev.preventDefault(); close(); trg.focus();
+          ev.preventDefault(); choose(i);
+        } else if (ev.key === "Escape") {
+          ev.preventDefault(); close(); trg.focus({ preventScroll: true });
+        } else if (ev.key === "Tab") {
+          ev.preventDefault(); close(); focusAdjacentControl(trg, ev.shiftKey);
+        } else if (ev.key.length === 1 && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+          focusTyped(ev.key);
         }
       });
       panel.appendChild(it);
     });
     document.body.appendChild(panel);
     const r = trg.getBoundingClientRect();
-    panel.style.left = r.left + "px";
-    panel.style.minWidth = r.width + "px";
+    panel.style.left = Math.max(6, Math.min(r.left, window.innerWidth - r.width - 6)) + "px";
+    panel.style.width = Math.min(r.width, window.innerWidth - 12) + "px";
     const below = window.innerHeight - r.bottom;
     if (below < 280 && r.top > below) panel.style.bottom = (window.innerHeight - r.top + 5) + "px";
     else panel.style.top = (r.bottom + 5) + "px";
+    panel.style.maxWidth = Math.max(180, window.innerWidth - 12) + "px";
     wrap.classList.add("open");
+    _openSelectClose = close;
     trg.setAttribute("aria-expanded", "true");
     trg.setAttribute("aria-controls", panel.id);
     window.addEventListener("scroll", close, true);
@@ -355,7 +404,7 @@ function enhanceSelect(sel) {
     setTimeout(() => document.addEventListener("mousedown", onDoc, true), 0);
     if (focusSelected) setTimeout(() => {
       const target = panel && (panel.querySelector(".cs-opt.sel:not(.dis)") || panel.querySelector(".cs-opt:not(.dis)"));
-      if (target) target.focus();
+      if (target) { target.focus(); target.scrollIntoView({ block: "nearest" }); }
     }, 0);
   }
   trg.addEventListener("click", e => { e.preventDefault(); panel ? close() : open(false); });
@@ -364,6 +413,8 @@ function enhanceSelect(sel) {
       e.preventDefault(); if (!panel) open(true);
     } else if (e.key === "Escape" && panel) {
       e.preventDefault(); close();
+    } else if (e.key.length === 1 && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault(); focusTyped(e.key);
     }
   });
   sel.addEventListener("change", sync);
@@ -371,7 +422,11 @@ function enhanceSelect(sel) {
   new MutationObserver(sync).observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
   sync();
 }
-function enhanceAllSelects(root) { (root || document).querySelectorAll("select:not([data-cs])").forEach(enhanceSelect); }
+function enhanceAllSelects(root) {
+  const scope = root || document;
+  if (scope.matches && scope.matches("select:not([data-cs])")) enhanceSelect(scope);
+  if (scope.querySelectorAll) scope.querySelectorAll("select:not([data-cs])").forEach(enhanceSelect);
+}
 function csSyncAll() { document.querySelectorAll("select[data-cs]").forEach(s => s._csSync && s._csSync()); }
 
 // ─── 自定义 tooltip:接管原生 title(首次 hover 时把 title 转 data-tip,避免系统提示)───
@@ -424,6 +479,7 @@ document.addEventListener("click", _tipHide);
 
 // ─── 自定义日期时间选择器:渐进增强 <input type=datetime-local> ───
 const _pad2 = n => String(n).padStart(2, "0");
+let _openDateClose = null;
 function _dtFmt(d) { return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}T${_pad2(d.getHours())}:${_pad2(d.getMinutes())}`; }
 function _dtDisp(d) { return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())} ${_pad2(d.getHours())}:${_pad2(d.getMinutes())}`; }
 function _dtParse(v) { const m = (v || "").match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null; }
@@ -450,9 +506,12 @@ function enhanceDateTime(inp) {
   wrap.appendChild(trg);
   let panel = null;
   function sync() { const d = _dtParse(inp.value); trg.querySelector(".dt-lbl").textContent = d ? _dtDisp(d) : ph; trg.classList.toggle("ph", !d); trg.disabled = !!inp.disabled; }
-  function close() { if (panel) { panel.remove(); panel = null; } wrap.classList.remove("open"); trg.setAttribute("aria-expanded", "false"); trg.removeAttribute("aria-controls"); window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); document.removeEventListener("mousedown", onDoc, true); }
+  function close() { if (panel) { panel.remove(); panel = null; } if (_openDateClose === close) _openDateClose = null; wrap.classList.remove("open"); trg.setAttribute("aria-expanded", "false"); trg.removeAttribute("aria-controls"); window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); document.removeEventListener("mousedown", onDoc, true); }
   function onDoc(e) { if (!wrap.contains(e.target) && (!panel || !panel.contains(e.target))) close(); }
   function open() {
+    if (inp.disabled) return;
+    if (_openSelectClose) _openSelectClose();
+    if (_openDateClose && _openDateClose !== close) _openDateClose();
     const init = _dtParse(inp.value) || new Date();
     let view = new Date(init.getFullYear(), init.getMonth(), 1);
     let chosen = _dtParse(inp.value);
@@ -467,12 +526,13 @@ function enhanceDateTime(inp) {
       const lead = (new Date(y, m, 1).getDay() + 6) % 7;   // 周一为首列
       const days = new Date(y, m + 1, 0).getDate();
       const t = new Date();
+      const chosenHere = chosen && chosen.getFullYear() === y && chosen.getMonth() === m;
       let cells = "";
       for (let i = 0; i < lead; i++) cells += `<span class="dt-day off"></span>`;
       for (let d = 1; d <= days; d++) {
         const today = t.getFullYear() === y && t.getMonth() === m && t.getDate() === d;
         const sel = chosen && chosen.getFullYear() === y && chosen.getMonth() === m && chosen.getDate() === d;
-        cells += `<button type="button" class="dt-day${today ? " today" : ""}${sel ? " sel" : ""}" data-d="${d}" aria-label="${y} 年 ${m + 1} 月 ${d} 日${today ? "，今天" : ""}"${sel ? ' aria-current="date"' : ""}>${d}</button>`;
+        cells += `<button type="button" class="dt-day${today ? " today" : ""}${sel ? " sel" : ""}" data-d="${d}" tabindex="${sel || (!chosenHere && d === 1) ? 0 : -1}" aria-label="${y} 年 ${m + 1} 月 ${d} 日${today ? "，今天" : ""}"${sel ? ' aria-current="date"' : ""}>${d}</button>`;
       }
       panel.innerHTML =
         `<div class="dt-head"><button type="button" class="dt-nav" data-nav="-1" aria-label="上个月">${ic("i-prev")}</button>` +
@@ -504,8 +564,27 @@ function enhanceDateTime(inp) {
     if (below < 360 && r.top > below) panel.style.bottom = (window.innerHeight - r.top + 5) + "px";
     else panel.style.top = (r.bottom + 5) + "px";
     wrap.classList.add("open");
+    _openDateClose = close;
     trg.setAttribute("aria-expanded", "true"); trg.setAttribute("aria-controls", panel.id);
-    panel.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); close(); trg.focus(); } });
+    panel.addEventListener("keydown", e => {
+      if (e.key === "Escape") { e.preventDefault(); close(); trg.focus({ preventScroll: true }); return; }
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key) && e.target.classList.contains("dt-day")) {
+        e.preventDefault();
+        const days = [...panel.querySelectorAll(".dt-day[data-d]")];
+        const index = days.indexOf(e.target);
+        const delta = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" ? -7 : e.key === "ArrowDown" ? 7 : 0;
+        const target = e.key === "Home" ? days[0] : e.key === "End" ? days[days.length - 1] : days[Math.max(0, Math.min(days.length - 1, index + delta))];
+        if (target) target.focus();
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusables = [...panel.querySelectorAll('button:not([disabled]):not([tabindex="-1"]),input:not([disabled])')];
+        const first = focusables[0], last = focusables[focusables.length - 1];
+        if ((!e.shiftKey && e.target === last) || (e.shiftKey && e.target === first)) {
+          e.preventDefault(); close(); focusAdjacentControl(trg, e.shiftKey);
+        }
+      }
+    });
     window.addEventListener("scroll", close, true); window.addEventListener("resize", close);
     setTimeout(() => document.addEventListener("mousedown", onDoc, true), 0);
     setTimeout(() => { const day = panel && (panel.querySelector(".dt-day.sel") || panel.querySelector(".dt-day[data-d]")); if (day) day.focus(); }, 0);
@@ -516,7 +595,11 @@ function enhanceDateTime(inp) {
   new MutationObserver(sync).observe(inp, { attributes: true, attributeFilter: ["disabled"] });
   sync();
 }
-function enhanceAllDateTime(root) { (root || document).querySelectorAll("input[type=datetime-local]:not([data-dt])").forEach(enhanceDateTime); }
+function enhanceAllDateTime(root) {
+  const scope = root || document;
+  if (scope.matches && scope.matches("input[type=datetime-local]:not([data-dt])")) enhanceDateTime(scope);
+  if (scope.querySelectorAll) scope.querySelectorAll("input[type=datetime-local]:not([data-dt])").forEach(enhanceDateTime);
+}
 function dtSyncAll() { document.querySelectorAll("input[type=datetime-local][data-dt]").forEach(i => i._dtSync && i._dtSync()); }
 
 // ─── 总览迷你图表(近 7 天采集,纯 SVG 分组柱状)───
@@ -747,6 +830,9 @@ const PAGE_META = {
   accounts: {
     title: "账号与网络", desc: "管理登录状态、账号资料与独立代理绑定。"
   },
+  "risk-control": {
+    title: "风控中心", desc: "统一管理风控规则，查看账号状态、触发原因、恢复进度与事件记录。"
+  },
   monitors: {
     title: "作品监控", desc: "添加采集目标，管理下载策略并追踪作品状态。"
   },
@@ -764,6 +850,9 @@ const PAGE_META = {
   },
   publish: {
     title: "内容发布", desc: "准备素材与文案，创建立即或定时发布任务。"
+  },
+  queue: {
+    title: "任务队列", desc: "统一查看采集、发布、评论、账号动作与下载任务的排队、执行和阻塞状态。"
   },
   autocomment: {
     title: "自动评论", desc: "配置评论与回复规则，并审核待发布文案。"
@@ -810,6 +899,9 @@ function switchPlatform(pf) {
   applyPlatformUI();
   // 切换后立刻刷新该平台数据
   refreshAccounts(); refreshMonitors(); refreshContents(); refreshWatches(); refreshComments(); refreshDanmakuWatches(); refreshDanmaku(); refreshCollections();
+  updateTaskQueuePlatformLabel();
+  if (CURRENT_TAB === "queue") refreshTaskQueue(true); else refreshTaskQueueBadge();
+  if (CURRENT_TAB === "risk-control") refreshRiskCenter(true);
   populateAcAccount(); onAcMode(); refreshCommentRules(); refreshCommentTasks();
   if (pfHasPublish(PLATFORM)) refreshPublish();
 }
@@ -935,7 +1027,20 @@ function switchTab(name, pushHistory = false) {
   if (!PAGE_META[name]) name = "overview";
   const changed = CURRENT_TAB !== name;
   CURRENT_TAB = name;
-  document.querySelectorAll("[data-panel]").forEach(p => { p.style.display = p.dataset.panel === name ? "" : "none"; });
+  if (_openSelectClose) _openSelectClose();
+  if (_openDateClose) _openDateClose();
+  if (OPEN_META_COMBO) OPEN_META_COMBO.close();
+  let activePanel = null;
+  document.querySelectorAll("[data-panel]").forEach(p => {
+    const active = p.dataset.panel === name;
+    p.style.display = active ? "" : "none";
+    p.classList.remove("panel-enter");
+    if (active) activePanel = p;
+  });
+  if (changed && activePanel) requestAnimationFrame(() => {
+    activePanel.classList.add("panel-enter");
+    activePanel.addEventListener("animationend", () => activePanel.classList.remove("panel-enter"), { once: true });
+  });
   document.querySelectorAll(".navitem").forEach(t => {
     const active = t.dataset.tab === name;
     t.classList.toggle("active", active);
@@ -960,10 +1065,70 @@ function switchTab(name, pushHistory = false) {
     refreshShareHistory();
   }
   if (name === "collections") { populateCollectionAccount(); refreshCollections(); }
+  if (name === "queue") refreshTaskQueue();
+  if (name === "risk-control") refreshRiskCenter();
 }
 
 // ─── 扫码登录(真实浏览器窗口) ───
 let qrTimer = null;
+let preLoginBrowserBackend = "default";
+let preLoginBrowserCatalog = null;
+function browserChoiceParts(choice) {
+  const [backend, runtimeId = ""] = String(choice || "default").split("::", 2);
+  return { backend: backend || "default", runtimeId };
+}
+function browserChoiceOptions(catalog, { localOnly = false } = {}) {
+  const backends = catalog.backends || [];
+  const defaultBackend = backends.find(item => item.name === catalog.default);
+  const local = backends.find(item => item.name === "local");
+  const fingerprint = backends.find(item => item.name === "fingerprint_chromium");
+  const runtimes = catalog.runtimes || [];
+  const options = [];
+  if (!localOnly || catalog.default === "local") options.push({
+      value: "default",
+      label: `跟随全局（${defaultBackend ? defaultBackend.label : catalog.default}）`,
+      disabled: !!defaultBackend && !defaultBackend.available,
+  });
+  if (local) options.push({
+    value: "local", label: local.label,
+    disabled: !local.available,
+  });
+  if (!localOnly) runtimes.forEach(runtime => options.push({
+    value: `fingerprint_chromium::${runtime.runtime_id}`,
+    label: `${runtime.name}${runtime.version ? ` · ${runtime.version}` : ""}${runtime.is_default ? " · 默认" : ""}`
+      + (runtime.available ? "" : ` · 不可用：${runtime.detail || "未配置"}`),
+    disabled: !runtime.available,
+  }));
+  if (!localOnly && !runtimes.length && fingerprint) options.push({
+    value: "fingerprint_chromium",
+    label: fingerprint.label + (fingerprint.available ? "" : ` · 不可用：${fingerprint.detail || "未配置"}`),
+    disabled: !fingerprint.available,
+  });
+  return options;
+}
+// 新账号尚未落库，扫码前先确定浏览器内核；成功后该选择随账号持久化。
+async function choosePreLoginBrowserBackend({ platform = "" } = {}) {
+  let catalog;
+  try {
+    catalog = await api("/api/browser-backends");
+    preLoginBrowserCatalog = catalog;
+  } catch (e) {
+    toast("读取登录环境失败：" + e.message, "err");
+    return null;
+  }
+  const localOnly = platform === "xhs";
+  const options = browserChoiceOptions(catalog, { localOnly });
+  const selected = await uiSelect({
+    title: "选择扫码登录环境",
+    hint: localOnly
+      ? "小红书固定使用系统 Chrome/CDP 原生环境；扫码、Cookie 和后续任务共用同一持久 Profile。"
+      : "扫码、Cookie 落地和后续账号任务将使用同一浏览器内核。新的指纹环境会同时打开 BrowserScan 体检标签。",
+    options,
+    value: localOnly ? "local" : preLoginBrowserBackend,
+  });
+  if (selected !== null) preLoginBrowserBackend = selected;
+  return selected;
+}
 // 登录前选代理:返回 "" (不用) | "auto" | 具体url | null(取消)
 async function choosePreLoginProxy() {
   let opts = [];
@@ -990,17 +1155,68 @@ async function choosePreLoginProxy() {
   }
   return v;
 }
-function loginStartUrl(path, proxy) {
-  return path + "?proxy=" + encodeURIComponent(proxy);
+function freshPreLoginFingerprint(browserBackend) {
+  const choice = browserChoiceParts(browserBackend);
+  const runtimes = (preLoginBrowserCatalog || {}).runtimes || [];
+  const runtime = runtimes.find(item => item.runtime_id === choice.runtimeId)
+    || runtimes.find(item => item.is_default) || {};
+  const seed = (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function")
+    ? globalThis.crypto.randomUUID().replaceAll("-", "")
+    : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+  return {
+    seed, engine_seed: "", fingerprint_id: seed.slice(0, 12),
+    source_ip: "", country: "", region: "", city: "",
+    timezone: "Asia/Shanghai", locale: "zh-CN", accept_languages: "",
+    viewport_w: 1280, viewport_h: 800, geo_lat: 0, geo_lon: 0,
+    platform: "", platform_version: "", brand: "", brand_version: "",
+    hardware_concurrency: 0, gpu_vendor: "", gpu_renderer: "",
+    disable_spoofing: [], language_mode: "auto", timezone_mode: "auto",
+    viewport_mode: "auto", location_mode: "auto",
+    geolocation_permission: "allow", webrtc_mode: "conceal", extra_args: "",
+    runtime_version: runtime.version || "",
+  };
+}
+async function configurePreLoginFingerprint(browserBackend) {
+  const choice = browserChoiceParts(browserBackend);
+  const effectiveBackend = choice.backend === "default"
+    ? (preLoginBrowserCatalog || {}).default
+    : choice.backend;
+  if (effectiveBackend !== "fingerprint_chromium") return "";
+  const draft = freshPreLoginFingerprint(browserBackend);
+  const account = {
+    nickname: "新账号",
+    environment: { runtime_version: draft.runtime_version },
+  };
+  const action = await uiFingerprintEditor(account, draft, { preLogin: true });
+  if (!action) return null;
+  return action.action === "auto" ? "" : action.data;
+}
+function loginStartUrl(path, proxy, browserBackend) {
+  const choice = browserChoiceParts(browserBackend);
+  return path + "?proxy=" + encodeURIComponent(proxy)
+    + "&browser_backend=" + encodeURIComponent(choice.backend)
+    + "&browser_runtime_id=" + encodeURIComponent(choice.runtimeId);
+}
+function loginStartOptions(fingerprint) {
+  if (!fingerprint || typeof fingerprint !== "object") return { method: "POST" };
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fingerprint),
+  };
 }
 async function startLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开浏览器窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/browser/start", proxy), { method: "POST" });
+    const res = await api(loginStartUrl("/api/login/browser/start", proxy, browserBackend), loginStartOptions(fingerprint));
     $("qrstatus").innerHTML = `${ic("i-eye")} <b>浏览器窗口已打开</b>，请在该窗口点击「登录」并使用抖音 App 扫码。<br>完成后这里会自动刷新。`;
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("登录启动失败:" + e.message, "err"); }
@@ -1008,6 +1224,7 @@ async function startLogin() {
 function loginEnvironmentText(env) {
   if (!env || !env.backend_label) return "";
   let text = env.backend_label;
+  if (env.runtime_version && !text.includes(env.runtime_version)) text += " · " + env.runtime_version;
   if (env.has_proxy) text += " · 账号代理";
   if (env.fallback_reason) text += "（" + env.fallback_reason + "）";
   return text;
@@ -1023,7 +1240,9 @@ function pollLogin(tid) {
       if (["opening", "waiting"].includes(res.status) && envText) {
         $("qrstatus").innerHTML = `${ic("i-eye")} 浏览器已打开 · <b>${esc(envText)}</b><br>请在可见窗口完成登录。`;
       }
-      if (res.status === "persisted") {
+      if (res.status === "verification") {
+        $("qrstatus").innerHTML = `${ic("i-info")} <b>需要完成一次设备安全验证</b><br>${esc(res.hint || "请扫描浏览器中的验证二维码，验证通过后会自动继续登录。")}`;
+      } else if (res.status === "persisted") {
         $("qrstatus").textContent = "扫码已确认，正在校验登录态并同步账号资料…";
         if (!accountShown) {
           accountShown = true;
@@ -1036,7 +1255,7 @@ function pollLogin(tid) {
           $("qrstatus").textContent = "登录校验未通过，请重新扫码";
           toast((PF_NAME[PLATFORM] || "账号") + "登录校验未通过，请重新扫码", "err");
         } else {
-          const suffix = res.profile_status === "error" ? "（资料稍后同步）" : "";
+          const suffix = ["error", "deferred"].includes(res.profile_status) ? "（资料可稍后刷新）" : "";
           $("qrstatus").textContent = "登录成功 ✓ " + (res.nickname || "") + suffix;
           toast("登录成功 " + (res.nickname || "") + suffix, res.profile_status === "error" ? "info" : "ok");
           setTimeout(() => { $("qrbox").style.display = "none"; }, 650);
@@ -1058,13 +1277,17 @@ function pollLogin(tid) {
 
 // ─── 创作者登录(自有账号评论模式用) ───
 async function startCreatorLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开创作中心窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/creator/start", proxy), { method: "POST" });
+    const res = await api(loginStartUrl("/api/login/creator/start", proxy, browserBackend), loginStartOptions(fingerprint));
     $("qrstatus").innerHTML = `${ic("i-eye")} <b>创作中心窗口已打开</b>，请在该窗口扫码登录抖音账号。<br>此登录态也可用于公开抓取。`;
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("创作者登录启动失败:" + e.message, "err"); }
@@ -1072,41 +1295,63 @@ async function startCreatorLogin() {
 
 // ─── 小红书扫码登录 ───
 async function startXhsLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend({ platform: "xhs" });
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开小红书窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/xhs/start", proxy), { method: "POST" });
-    $("qrstatus").innerHTML = `${ic("i-eye")} <b>小红书官网首页已打开</b>，请在窗口中点击「登录」并使用小红书 App 扫码。<br>主站登录成功后会保存读取登录态并自动关闭窗口。<br>如需发布，请随后单独点击「创作者登录」。`;
+    const res = await api(loginStartUrl("/api/login/xhs/start", proxy, browserBackend), loginStartOptions(fingerprint));
+    if (res.reused) {
+      $("qrstatus").innerHTML = `${ic("i-eye")} <b>已有小红书扫码窗口</b>，已尝试切换到前台，请直接在该窗口继续。`;
+      toast("已有扫码窗口，已切换到前台", "info");
+    } else {
+      $("qrstatus").innerHTML = `${ic("i-eye")} <b>小红书官网首页已用系统 Chrome 打开</b>，请在窗口中点击「登录」并使用小红书 App 扫码。<br>如出现平台安全验证，自动任务会暂停，请只在当前窗口按提示完成。<br>主站登录成功后会保存读取登录态并自动关闭窗口。<br>如需发布，请随后单独点击「创作者登录」。`;
+    }
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("小红书登录启动失败:" + e.message, "err"); }
 }
 
 // ─── 小红书创作者登录(发布用) ───
 async function startXhsCreatorLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend({ platform: "xhs" });
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开小红书创作平台窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/xhs-creator/start", proxy), { method: "POST" });
-    $("qrstatus").innerHTML = `${ic("i-eye")} <b>小红书创作平台窗口已打开</b>，请扫码登录，此登录态用于发布。<br>登录成功后请稍等片刻再关闭窗口。`;
+    const res = await api(loginStartUrl("/api/login/xhs-creator/start", proxy, browserBackend), loginStartOptions(fingerprint));
+    if (res.reused) {
+      $("qrstatus").innerHTML = `${ic("i-eye")} <b>已有小红书创作平台扫码窗口</b>，已尝试切换到前台，请直接在该窗口继续。`;
+      toast("已有创作者扫码窗口，已切换到前台", "info");
+    } else {
+      $("qrstatus").innerHTML = `${ic("i-eye")} <b>小红书创作平台窗口已打开</b>，请扫码登录，此登录态用于发布。<br>登录成功后请稍等片刻再关闭窗口。`;
+    }
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("创作者登录启动失败:" + e.message, "err"); }
 }
 
 // ─── 快手扫码登录 ───
 async function startKsLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开快手窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/kuaishou/start", proxy), { method: "POST" });
+    const res = await api(loginStartUrl("/api/login/kuaishou/start", proxy, browserBackend), loginStartOptions(fingerprint));
     $("qrstatus").innerHTML = `${ic("i-eye")} <b>快手窗口已打开</b>，请在该窗口点击「登录」并使用快手 App 扫码。<br>完成后这里会自动刷新。`;
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("快手登录启动失败:" + e.message, "err"); }
@@ -1114,13 +1359,17 @@ async function startKsLogin() {
 
 // ─── 快手创作者登录(发布用) ───
 async function startKsCreatorLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开快手创作平台窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/kuaishou-creator/start", proxy), { method: "POST" });
+    const res = await api(loginStartUrl("/api/login/kuaishou-creator/start", proxy, browserBackend), loginStartOptions(fingerprint));
     $("qrstatus").innerHTML = `${ic("i-eye")} <b>快手创作平台窗口已打开</b>，请扫码登录，此登录态用于发布。<br>登录成功后请稍等片刻再关闭窗口。`;
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("创作者登录启动失败:" + e.message, "err"); }
@@ -1128,13 +1377,17 @@ async function startKsCreatorLogin() {
 
 // ─── 视频号扫码登录(读取/发布共用,微信扫码) ───
 async function startChannelsLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
   if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
   $("cookiebox").style.display = "none";
   $("qrbox").style.display = "block";
   $("qrstatus").textContent = "正在打开视频号助手窗口…";
   try {
-    const res = await api(loginStartUrl("/api/login/shipinhao/start", proxy), { method: "POST" });
+    const res = await api(loginStartUrl("/api/login/shipinhao/start", proxy, browserBackend), loginStartOptions(fingerprint));
     $("qrstatus").innerHTML = `${ic("i-eye")} <b>视频号助手窗口已打开</b>，请使用微信扫码登录，读取和发布共用此登录态。<br>登录成功后请稍等片刻再关闭窗口。`;
     pollLogin(res.task_id);
   } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("视频号登录启动失败:" + e.message, "err"); }
@@ -1162,6 +1415,8 @@ async function saveCookie() {
 
 // ─── 账号 ───
 let ACCOUNTS = [];
+let BROWSER_RUNTIMES = [];
+let BROWSER_RUNTIME_ROOT = "";
 let MONITORS = [], WATCHES = [], CONTENTS = [];
 let COLLECTION_JOBS = [], COLLECTION_JOB_ID = 0, COLLECTION_PAGE = 1;
 let DANMAKU_WATCHES = [];
@@ -1501,13 +1756,17 @@ async function refreshAccounts() {
       a.douyin_id ? idName + esc(a.douyin_id) : null,
       a.sec_uid ? secName + esc(a.sec_uid).slice(0, 16) + "…" : null,
     ].filter(Boolean).join(" · ");
+    const loginDetails = isXhs
+      ? [a.has_read_login ? "读取登录已保存" : "读取登录未配置",
+         a.has_creator ? "创作登录已保存" : "创作登录未配置"]
+      : [a.has_storage
+          ? (a.status === "invalid" ? "登录态已保存但校验失效" : "登录态有效")
+          : "无登录态"];
     const detail = [
       a.aweme_count ? a.aweme_count + (isXhs ? " 笔记" : " 作品") : null,
       a.follower_count ? fmtNum(a.follower_count) + " 粉丝" : null,
       isXhs ? "扫码登录" : (a.login_type === "cookie" ? "Cookie 登录" : "扫码登录"),
-      a.has_storage
-        ? (a.status === "invalid" ? "登录态已保存但校验失效" : "登录态有效")
-        : "无登录态",
+      ...loginDetails,
       `被 ${a.monitor_count} 个监控使用`,
       a.created_at ? "登录于 " + new Date(a.created_at + "Z").toLocaleString() : null,
     ].filter(Boolean).join(" · ");
@@ -1522,9 +1781,30 @@ async function refreshAccounts() {
     const proxyLine = a.has_proxy
       ? `<div class="mut" style="font-size:11px;margin-top:2px">代理 <code>${esc(a.proxy)}</code> <span class="pill ${pxCls}">${pxText[a.proxy_status] || a.proxy_status}</span></div>`
       : `<div class="ic-text" style="font-size:11px;margin-top:2px;color:var(--warn)">${ic("i-info")}未配置代理(走本机真实 IP,多账号有关联风险)</div>`;
-    const browserLine = isXhs && a.environment
+    const browserLine = a.environment
       ? `<div class="mut" style="font-size:11px;margin-top:2px">浏览器 ${esc(loginEnvironmentText(a.environment))}</div>`
       : "";
+    const fingerprintPlace = [a.fingerprint_country, a.fingerprint_region, a.fingerprint_city]
+      .filter(Boolean).join(" · ");
+    const fingerprintLine = a.fingerprint_ip
+      ? `<div class="mut" style="font-size:11px;margin-top:2px">指纹 ${esc(a.fingerprint_id || "-")} · IP ${esc(a.fingerprint_ip)} · ${esc(fingerprintPlace || a.fingerprint_timezone || "未知地区")}${a.exit_ip && !a.fingerprint_ip_matches_exit ? ' <span class="pill invalid">与当前出口不一致</span>' : ""}</div>`
+      : `<div class="mut" style="font-size:11px;margin-top:2px">指纹尚未按出口 IP 生成</div>`;
+    const isolationLine = a.profile_isolated
+      ? `<div class="mut" style="font-size:11px;margin-top:2px">环境隔离 <span class="pill active">独立 Profile ${esc(a.profile_isolation_id || "")}</span></div>`
+      : `<div class="ic-text" style="font-size:11px;margin-top:2px;color:var(--danger)">${ic("i-info")}环境隔离异常：Profile 与其他账号重复或尚未分配</div>`;
+    const environmentCheck = a.environment_check;
+    const checkLine = environmentCheck && environmentCheck.enabled
+      ? `<div class="mut" style="font-size:11px;margin-top:2px">环境体检 <span class="pill ${environmentCheck.required ? "pending" : "active"}">${environmentCheck.required ? "待打开" : "已提示"}</span>${environmentCheck.last_opened_at ? ` · ${new Date(environmentCheck.last_opened_at).toLocaleString()}` : " · 新环境首次启动自动打开"}</div>`
+      : "";
+    const reloginButton = isXhs && !a.has_read_login
+      ? `<button class="sm" style="background:var(--warn);border-color:transparent;color:#1a1a1a" onclick="relogin(${a.id},'read')">补读取登录</button>`
+      : (a.status === "invalid"
+          ? `<button class="sm" style="background:var(--warn);border-color:transparent;color:#1a1a1a" onclick="relogin(${a.id})">重新登录</button>`
+          : `<button class="ghost sm" onclick="relogin(${a.id})" title="${isXhs ? "重新扫码登录当前授权" : "重新扫码登录"}">重新登录</button>`);
+    const creatorLoginButton = isXhs && !a.has_creator
+      ? `<button class="ghost sm" onclick="relogin(${a.id},'creator')">补创作登录</button>` : "";
+    const accountStatusLabel = a.status === "invalid"
+      ? "登录失效" : (isXhs && !a.has_read_login && a.has_creator ? "创作登录正常" : "正常");
     return `<tr>
       <td>
         <div class="user-cell">
@@ -1535,17 +1815,22 @@ async function refreshAccounts() {
             <div class="mut" style="font-size:11px;margin-top:2px">${esc(detail)}</div>
             ${proxyLine}
             ${browserLine}
+            ${fingerprintLine}
+            ${isolationLine}
+            ${checkLine}
           </div>
         </div>
       </td>
-      <td><span class="pill ${a.status}">${a.status === "invalid" ? "登录失效" : "正常"}</span></td>
+      <td><span class="pill ${a.status}">${accountStatusLabel}</span></td>
       <td class="acttd">
-        ${a.status === "invalid"
-          ? `<button class="sm" style="background:var(--warn);border-color:transparent;color:#1a1a1a" onclick="relogin(${a.id})">重新登录</button>`
-          : `<button class="ghost sm" onclick="relogin(${a.id})" title="${isXhs ? "重登可升级创作平台授权(发布需要)" : "重新扫码登录"}">重新登录</button>`}
+        ${reloginButton}
+        ${creatorLoginButton}
         <button class="ghost sm" onclick="refreshProfile(${a.id})">刷新资料</button>
         <button class="ghost sm" onclick="openAccountHub(${a.id})" title="查看该账号的作品 / 关注 / 粉丝 / 私信">数据</button>
         <button class="ghost sm" onclick="openAccountBrowser(${a.id})" title="用该账号登录态弹出真实浏览器窗口,手动收发私信 / 维护 / 抓接口(关窗即保存)">打开浏览器</button>
+        <button class="ghost sm" onclick="setBrowserBackend(${a.id})" title="选择本地 Chrome/Patchright 或开源 Fingerprint Chromium 内核">环境</button>
+        <button class="ghost sm" onclick="manageFingerprint(${a.id})" title="根据账号当前出口 IP 生成稳定指纹、时区、语言和地理位置">指纹</button>
+        ${environmentCheck && environmentCheck.enabled ? `<button class="ghost sm" onclick="checkBrowserEnvironment(${a.id})" title="在该账号独立 Profile 中打开 BrowserScan，查看实际 IP、时区、WebRTC 和指纹">环境检测</button>` : ""}
         <button class="ghost sm" onclick="setProxy(${a.id})" title="设置/分配该账号专属代理(防多账号关联)">代理</button>
         ${a.has_proxy ? `<button class="ghost sm" onclick="testProxy(${a.id})" title="经该代理实连一次,验证可用">测代理</button>` : ""}
         <button class="ghost sm danger" onclick="delAccount(${a.id})" aria-label="删除账号">${ic("i-trash")}删除</button>
@@ -1565,6 +1850,283 @@ async function refreshAccounts() {
   if (at && at.dataset.tab === "hub") refreshHubPanel();
 }
 
+// ═══════════ 风控中心 ═══════════
+let RISK_ACCOUNTS = [];
+let RISK_CONFIG = null;
+
+function riskDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+function riskTime(value) {
+  const date = riskDate(value);
+  return date ? date.toLocaleString() : "—";
+}
+function riskDuration(seconds) {
+  let left = Math.max(0, Math.ceil(Number(seconds) || 0));
+  if (!left) return "已到期";
+  const days = Math.floor(left / 86400); left %= 86400;
+  const hours = Math.floor(left / 3600); left %= 3600;
+  const minutes = Math.ceil(left / 60);
+  return [days ? `${days}天` : "", hours ? `${hours}小时` : "", minutes ? `${minutes}分钟` : ""].filter(Boolean).join("");
+}
+function riskRemaining(value) {
+  const date = riskDate(value);
+  return date ? riskDuration((date.getTime() - Date.now()) / 1000) : "—";
+}
+function riskPlatformLabel(platform) { return PF_NAME[platform] || platform || "—"; }
+const RISK_KIND_LABELS = {
+  read_light: "轻量读取", read_heavy: "重读取", download: "下载", publish: "发布",
+  comment: "评论", social: "关注操作", dm: "私信", login: "登录",
+};
+const RISK_OUTCOME_LABELS = {
+  success: "成功", risk: "平台风控", auth: "登录失效", network: "网络异常",
+  business: "业务异常", manual: "人工操作",
+};
+
+async function refreshRiskCenter(force = false) {
+  try {
+    const shouldFillConfig = !RISK_CONFIG || force;
+    const configPromise = shouldFillConfig ? api("/api/risk-control/config") : Promise.resolve(RISK_CONFIG);
+    const platformQuery = "?platform=" + encodeURIComponent(PLATFORM);
+    const [summary, accounts, config] = await Promise.all([
+      api("/api/risk-control/summary" + platformQuery),
+      api("/api/risk-control/accounts" + platformQuery),
+      configPromise,
+    ]);
+    RISK_ACCOUNTS = accounts;
+    RISK_CONFIG = config;
+    renderRiskSummary(summary);
+    renderRiskAccounts();
+    if (shouldFillConfig) fillRiskConfig(config);
+    if (force) toast("风控状态已刷新", "ok");
+  } catch (e) {
+    if (force || CURRENT_TAB === "risk-control") toast("风控中心加载失败：" + e.message, "err");
+  }
+}
+
+function renderRiskSummary(summary) {
+  const counts = summary.counts || {};
+  $("risk-stat-normal").textContent = counts.normal || 0;
+  $("risk-stat-cooldown").textContent = (counts.cooldown || 0) + (counts.network_circuit || 0) + (counts.write_paused || 0);
+  $("risk-stat-recovering").textContent = counts.recovering || 0;
+  $("risk-stat-invalid").textContent = (counts.auth_invalid || 0) + (counts.proxy_error || 0);
+  $("risk-stat-blocked").textContent = summary.blocked_tasks || 0;
+  $("risk-stat-today").textContent = summary.risk_events_today || 0;
+  if ($("tb-risk")) $("tb-risk").textContent = summary.abnormal || 0;
+}
+
+function renderRiskAccounts() {
+  const tbody = $("risk-account-table");
+  if (!tbody) return;
+  const query = ($("risk-account-search")?.value || "").trim().toLowerCase();
+  const status = $("risk-status-filter")?.value || "";
+  const rows = RISK_ACCOUNTS.filter(account => {
+    if (status && account.status !== status) return false;
+    if (!query) return true;
+    return [account.nickname, account.reason, account.proxy, account.status_label]
+      .some(value => String(value || "").toLowerCase().includes(query));
+  });
+  if ($("risk-filter-count")) $("risk-filter-count").textContent = `显示 ${rows.length} / ${RISK_ACCOUNTS.length}`;
+  tbody.innerHTML = rows.map(account => {
+    const progress = account.risk_level > 0
+      ? Math.min(100, Math.round((account.recovery_successes || 0) * 100 / Math.max(1, account.recovery_target || 1)))
+      : 100;
+    const timing = account.status === "cooldown" || account.status === "network_circuit"
+      ? `<b>${esc(riskRemaining(account.cooldown_until))}</b><small>截止 ${esc(riskTime(account.cooldown_until))}</small>`
+      : account.status === "recovering"
+        ? `<b>下次探测</b><small>${esc(riskTime(account.next_probe_at))}</small>`
+        : `<span class="mut">无需等待</span>`;
+    const queue = account.queued_tasks || { total: 0 };
+    const reason = account.reason || "未检测到风险信号";
+    const nextProbe = riskDate(account.next_probe_at);
+    const probeWaiting = !!(nextProbe && nextProbe.getTime() > Date.now());
+    const actualAccountId = account.platform_account_id
+      ? `${account.platform_account_id_label || "账号 ID"} ${account.platform_account_id}`
+      : "尚未获取平台账号 ID";
+    return `<tr>
+      <td><div class="risk-account"><b>${esc(account.nickname || "未命名账号")}</b><small title="${esc(actualAccountId)}">${esc(riskPlatformLabel(account.platform))} · ${esc(actualAccountId)}</small></div></td>
+      <td><span class="risk-status ${esc(account.status_tone)}">${esc(account.status_label)}</span></td>
+      <td class="num"><b>L${Number(account.risk_level) || 0}</b></td>
+      <td><div class="risk-reason"><span title="${esc(reason)}">${esc(reason)}</span><small>${account.last_risk_at ? "触发于 " + esc(riskTime(account.last_risk_at)) : "暂无风险记录"}</small></div></td>
+      <td><div class="risk-account">${timing}</div></td>
+      <td><div class="risk-progress"><div class="risk-progress-track"><i style="width:${progress}%"></i></div><span>${account.risk_level > 0 ? `${account.recovery_successes}/${account.recovery_target}` : "完成"}</span></div></td>
+      <td><b class="num">${account.blocked_tasks || 0} / ${queue.total || 0}</b><div class="mut" style="font-size:11px" title="${esc(account.latest_block_reason || "")}">受阻 / 待执行${account.task_next_allowed_at ? ` · ${esc(riskRemaining(account.task_next_allowed_at))}` : ""}</div></td>
+      <td><div class="risk-account"><span>${account.proxy ? `<code>${esc(account.proxy)}</code>` : "本机直连"}</span><small>${esc(account.proxy_status || "unknown")} · ${esc(account.network_key || "—")}</small></div></td>
+      <td class="acttd">
+        <button class="ghost sm" onclick="probeRiskAccount(${account.account_id})" ${probeWaiting ? "disabled" : ""} title="${probeWaiting ? `下次探测 ${esc(riskTime(account.next_probe_at))}` : "执行一次受风控闸门约束的轻量账号探测"}">${probeWaiting ? "等待探测" : "探测"}</button>
+        <button class="ghost sm" onclick="showRiskEvents(${account.account_id})">记录</button>
+        <button class="ghost sm" onclick="openAccountBrowser(${account.account_id})">浏览器</button>
+        ${account.status !== "normal" ? `<button class="ghost sm danger" onclick="clearRiskAccount(${account.account_id})">解除</button>` : ""}
+      </td>
+    </tr>`;
+  }).join("") || empty(9, "没有匹配的账号状态", "i-shield", "调整筛选条件或先添加平台账号");
+}
+
+function fillRiskConfig(config) {
+  if (!config) return;
+  const r = config.risk_control || {}, s = config.schedule || {};
+  const set = (id, value) => { const el = $(id); if (el) { el.value = value ?? ""; if (el._csSync) el._csSync(); } };
+  $("risk-enabled").checked = !!r.enabled;
+  set("risk-mode", r.mode); set("risk-retention", r.event_retention_days);
+  set("risk-read-light", r.read_light_gap_seconds); set("risk-read-heavy", r.read_heavy_gap_seconds);
+  set("risk-recovery-count", r.recovery_successes); set("risk-probe-gap", (r.recovery_probe_gap_seconds || 0) / 60);
+  set("risk-cooldown-steps", (r.cooldown_steps_seconds || []).map(v => v / 60).join(", "));
+  set("risk-network-concurrency", r.network_group_concurrency); set("risk-network-accounts", r.network_group_risk_accounts);
+  set("risk-network-window", (r.network_group_risk_window_seconds || 0) / 60); set("risk-network-cooldown", (r.network_group_cooldown_seconds || 0) / 60);
+  set("risk-account-check", (s.account_check_interval_seconds || 0) / 60); set("risk-captcha-wait", (s.douyin_captcha_wait_seconds || 0) / 60);
+  $("risk-quiet-enabled").checked = !!s.quiet_hours_enabled;
+  set("risk-active-start", s.active_hours_start); set("risk-active-end", s.active_hours_end);
+  [["comment", "comment"], ["social", "social"], ["dm", "dm"], ["publish", "publish"]].forEach(([id, key]) => {
+    set(`risk-${id}-gap`, (r[`${key}_min_gap_seconds`] || 0) / 60);
+    set(`risk-${id}-hourly`, r[`${key}_hourly_cap`]); set(`risk-${id}-daily`, r[`${key}_daily_cap`]);
+  });
+  set("risk-shared-write", (r.shared_write_gap_seconds || 0) / 60);
+  set("risk-combined-hourly", r.combined_action_hourly_cap); set("risk-combined-daily", r.combined_action_daily_cap);
+  if ($("risk-admin-token-btn")) {
+    $("risk-admin-token-btn").style.display = config.admin_token_required ? "" : "none";
+    let configured = false;
+    try { configured = !!sessionStorage.getItem("creatorhub-risk-admin-token"); } catch (e) {}
+    $("risk-admin-token-btn").innerHTML = `${ic("i-shield")}${configured ? "管理口令已设置" : "设置管理口令"}`;
+  }
+}
+
+async function setRiskAdminToken() {
+  const token = await uiPrompt({
+    title: "设置本次会话的风控管理口令",
+    hint: "口令只保存在当前浏览器标签会话中。留空会清除已经保存的口令。",
+    placeholder: "CREATORHUB_ADMIN_TOKEN", secret: true,
+  });
+  if (token === null) return;
+  try {
+    if (token.trim()) sessionStorage.setItem("creatorhub-risk-admin-token", token.trim());
+    else sessionStorage.removeItem("creatorhub-risk-admin-token");
+  } catch (e) {}
+  fillRiskConfig(RISK_CONFIG);
+  toast(token.trim() ? "管理口令已保存到当前会话" : "管理口令已清除", "ok");
+}
+
+function riskNumber(id, multiplier = 1) {
+  const value = Number($(id).value);
+  if (!Number.isFinite(value) || value < Number($(id).min || 0)) throw new Error($(id).labels?.[0]?.textContent + "填写不正确");
+  return Math.round(value * multiplier);
+}
+
+async function saveRiskConfig() {
+  const msg = $("risk-config-msg");
+  const restore = btnLoading(evtBtn(), "保存中");
+  INFLIGHT++; _barSync();
+  try {
+    const steps = $("risk-cooldown-steps").value.split(/[,，\s]+/).filter(Boolean).map(Number);
+    if (!steps.length || steps.some(v => !Number.isFinite(v) || v <= 0)) throw new Error("冷却阶梯需要填写有效的分钟数");
+    const r = {
+      enabled: $("risk-enabled").checked, mode: $("risk-mode").value,
+      network_group_concurrency: riskNumber("risk-network-concurrency"),
+      read_light_gap_seconds: riskNumber("risk-read-light"), read_heavy_gap_seconds: riskNumber("risk-read-heavy"),
+      shared_write_gap_seconds: riskNumber("risk-shared-write", 60),
+      cooldown_steps_seconds: steps.map(v => Math.round(v * 60)),
+      recovery_successes: riskNumber("risk-recovery-count"), recovery_probe_gap_seconds: riskNumber("risk-probe-gap", 60),
+      event_retention_days: riskNumber("risk-retention"),
+      network_group_risk_accounts: riskNumber("risk-network-accounts"),
+      network_group_risk_window_seconds: riskNumber("risk-network-window", 60),
+      network_group_cooldown_seconds: riskNumber("risk-network-cooldown", 60),
+      combined_action_hourly_cap: riskNumber("risk-combined-hourly"), combined_action_daily_cap: riskNumber("risk-combined-daily"),
+    };
+    ["comment", "social", "dm", "publish"].forEach(key => {
+      r[`${key}_min_gap_seconds`] = riskNumber(`risk-${key}-gap`, 60);
+      r[`${key}_hourly_cap`] = riskNumber(`risk-${key}-hourly`);
+      r[`${key}_daily_cap`] = riskNumber(`risk-${key}-daily`);
+    });
+    const schedule = {
+      quiet_hours_enabled: $("risk-quiet-enabled").checked,
+      active_hours_start: riskNumber("risk-active-start"), active_hours_end: riskNumber("risk-active-end"),
+      account_check_interval_seconds: riskNumber("risk-account-check", 60),
+      douyin_captcha_wait_seconds: riskNumber("risk-captcha-wait", 60),
+    };
+    msg.textContent = "保存中…";
+    RISK_CONFIG = await api("/api/risk-control/config", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ risk_control: r, schedule }),
+    });
+    fillRiskConfig(RISK_CONFIG); msg.textContent = "已保存并生效"; toast("风控规则已保存并立即生效", "ok");
+    await refreshRiskCenter();
+  } catch (e) { msg.textContent = e.message; toast("保存失败：" + e.message, "err"); }
+  finally { INFLIGHT--; restore(); _barSync(); }
+}
+
+async function probeRiskAccount(accountId) {
+  const button = evtBtn();
+  await withBusy(button, "探测中", async () => {
+    try {
+      const response = await api(`/api/risk-control/accounts/${accountId}/probe`, { method: "POST" });
+      const result = response.result || {};
+      if (result.skipped) toast("当前尚未放行探测：" + (result.reason || "仍处于冷却期"), "info", 7000);
+      else toast(`轻量探测成功，恢复进度已更新${response.woken_tasks ? `，已唤醒 ${response.woken_tasks} 条任务` : ""}`, "ok");
+    } catch (e) { toast("探测失败：" + e.message, "err", 7000); }
+    await refreshRiskCenter();
+  });
+}
+
+async function clearRiskAccount(accountId) {
+  const nickname = RISK_ACCOUNTS.find(account => account.account_id === accountId)?.nickname || `账号 ${accountId}`;
+  const reason = await uiPrompt({
+    title: "填写解除原因",
+    hint: `请说明已对「${nickname}」完成的人工检查。该内容会进入审计记录。`,
+    placeholder: "例如：已完成验证码并确认代理出口正常", multiline: true, rows: 4,
+  });
+  if (reason === null) return;
+  if (reason.trim().length < 3) { toast("请填写至少 3 个字符的解除原因", "err"); return; }
+  if (!await uiConfirm({ title: "解除账号风控状态", message: `请确认已人工检查「${nickname}」的登录态、验证码和网络出口。解除后待执行任务可能继续运行。`, okText: "确认解除", danger: true })) return;
+  try {
+    const result = await api(`/api/risk-control/accounts/${accountId}/clear`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed: true, reason: reason.trim() }),
+    });
+    toast(`账号风控状态已解除${result.woken_tasks ? `，已唤醒 ${result.woken_tasks} 条任务` : ""}`, "ok"); await refreshRiskCenter();
+  } catch (e) { toast("解除失败：" + e.message, "err"); }
+}
+
+async function showRiskEvents(accountId) {
+  const nickname = RISK_ACCOUNTS.find(account => account.account_id === accountId)?.nickname || `账号 ${accountId}`;
+  const modal = $("risk-event-modal");
+  $("risk-event-title").textContent = `${nickname || "账号"} · 风险事件`;
+  $("risk-event-subtitle").textContent = "正在加载最近事件…";
+  $("risk-event-list").innerHTML = '<div class="hint">正在加载事件记录…</div>';
+  modal.style.display = "flex"; modalOpened(modal);
+  try {
+    const data = await api(`/api/risk-control/accounts/${accountId}/events?limit=100`);
+    $("risk-event-subtitle").textContent = `最近 ${data.events.length} 条 · 不保存响应正文或账号凭据`;
+    $("risk-event-list").innerHTML = data.events.map(event => `<div class="risk-event">
+      <time>${esc(riskTime(event.occurred_at))}</time>
+      <span class="risk-status ${event.outcome === "success" ? "success" : event.outcome === "manual" || event.outcome === "business" ? "warn" : "danger"}">${esc(RISK_OUTCOME_LABELS[event.outcome] || event.outcome)}</span>
+      <b>${esc(RISK_KIND_LABELS[event.operation_kind] || event.operation_kind)}</b>
+      <div class="risk-event-detail">${esc(event.detail || event.signal || "无补充说明")}<small>${esc(event.signal || "—")} · ${esc(event.network_key || "—")}</small></div>
+    </div>`).join("") || '<div class="hint">暂无风险事件；账号发生平台操作后会在这里形成记录。</div>';
+  } catch (e) { $("risk-event-list").innerHTML = `<div class="hint">加载失败：${esc(e.message)}</div>`; }
+}
+function hideRiskEvents() { const modal = $("risk-event-modal"); modal.style.display = "none"; modalClosed(modal); }
+async function showRiskAudit() {
+  const modal = $("risk-event-modal");
+  $("risk-event-title").textContent = "风控管理变更记录";
+  $("risk-event-subtitle").textContent = "正在加载审计记录…";
+  $("risk-event-list").innerHTML = '<div class="hint">正在加载变更记录…</div>';
+  modal.style.display = "flex"; modalOpened(modal);
+  try {
+    const rows = await api("/api/risk-control/audit?limit=100");
+    $("risk-event-subtitle").textContent = `最近 ${rows.length} 条 · 包含规则修改、人工探测和解除操作`;
+    const labels = { policy_updated: "规则修改", manual_probe: "人工探测", account_risk_cleared: "人工解除" };
+    $("risk-event-list").innerHTML = rows.map(row => {
+      const detail = row.detail || {};
+      const changeCount = Object.values(detail.changes || {}).reduce((sum, section) => sum + Object.keys(section || {}).length, 0);
+      const summary = detail.reason || (changeCount ? `修改 ${changeCount} 项规则` : detail.skipped ? `探测延后：${detail.reason || "风控闸门未放行"}` : "操作完成");
+      return `<div class="risk-event"><time>${esc(riskTime(row.created_at))}</time><span class="risk-status warn">${esc(labels[row.action] || row.action)}</span><b>${row.account_id ? `账号 ${row.account_id}` : "全局"}</b><div class="risk-event-detail">${esc(summary)}<small>${esc(row.actor || "local-ui")}</small></div></div>`;
+    }).join("") || '<div class="hint">暂无风控管理变更记录。</div>';
+  } catch (e) { $("risk-event-list").innerHTML = `<div class="hint">加载失败：${esc(e.message)}</div>`; }
+}
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && $("risk-event-modal")?.style.display !== "none") hideRiskEvents();
+});
+
 // ═══════════ 账号管理(独立面板:我的作品 / 关注 / 粉丝 / 私信)═══════════
 // 当前操作的账号 id —— 按平台各记各的,切平台不串号、不串数
 let HUB_ACC = "";
@@ -1580,13 +2142,39 @@ async function openAccountBrowser(id) {
   await withBusy(evtBtn(), "打开中", async () => {
     try {
       const result = await api("/api/accounts/" + id + "/open-browser", { method: "POST" });
+      const checkHint = result.environment_check_opened
+        ? " 已同时打开 BrowserScan 环境体检标签。" : "";
       if (result.logged_out) {
-        toast("该账号登录态已失效，请关闭当前窗口后点「重新登录」完成扫码", "err", 8000);
+        toast("该账号登录态已失效，请关闭当前窗口后点「重新登录」完成扫码。" + checkHint, "err", 8000);
         refreshAccounts();
+      } else if (result.login_state === "verification") {
+        toast("浏览器已打开；小红书要求安全验证，请在窗口中按提示完成。" + checkHint, "info", 8000);
+      } else if (result.login_state === "unconfirmed") {
+        toast("浏览器已打开；页面尚未返回登录校验结果，不会因此把账号标记为登录失败。" + checkHint, "info", 7000);
       } else {
-        toast("已弹出该账号浏览器窗口;用完请关窗(关窗即保存登录态)。窗口开着时该账号后台同步会暂停", "ok", 6000);
+        const scope = result.login_scope === "creator" ? "创作平台" : "主站读取";
+        toast("已弹出该账号" + scope + "浏览器窗口;用完请关窗(关窗即保存登录态)。窗口开着时该账号后台同步会暂停。" + checkHint, "ok", 7000);
       }
     } catch (e) { toast("打开失败:" + e.message, "err"); }
+  });
+}
+
+async function checkBrowserEnvironment(id) {
+  const btn = evtBtn();
+  const confirmed = await uiConfirm({
+    title: "打开第三方环境检测",
+    message: "将在该账号的独立指纹环境中访问 BrowserScan。该站点会看到当前出口 IP 和浏览器指纹；检测结果仅用于环境核对，不代表平台风控一定通过。",
+    okText: "打开检测页",
+  });
+  if (!confirmed) return;
+  await withBusy(btn, "打开中", async () => {
+    try {
+      await api("/api/accounts/" + id + "/environment-check", { method: "POST" });
+      toast("BrowserScan 已在该账号独立环境中打开，请核对 IP、时区、WebRTC 与指纹一致性", "ok", 8000);
+      await refreshAccounts();
+    } catch (e) {
+      toast("环境检测打开失败:" + e.message, "err", 8000);
+    }
   });
 }
 
@@ -1648,7 +2236,7 @@ function refreshHubPanel() {
   if (HUB_TAB === "myworks") refreshMyWorks();
   else if (HUB_TAB === "following") refreshFollows("following");
   else if (HUB_TAB === "fans") refreshFollows("fan");
-  else if (HUB_TAB === "dm") { refreshDmConvs(); startDmStream(); }
+  else if (HUB_TAB === "dm") { refreshDmConvs(); refreshDmAutomation(); startDmStream(); }
   else if (HUB_TAB === "stats") loadHubStats();
 }
 
@@ -1799,6 +2387,7 @@ async function loadWorkComments() {
 function cmtRow(c) {
   return `<div class="wc-item${c.is_reply ? " reply" : ""}">
     <div class="wc-head"><b>${esc(c.user_nickname || "匿名")}</b><span class="wc-time">${fmtTime(c.create_time)}</span></div>
+    ${c.user_sec_uid ? `<div class="comment-user-sec" title="${esc(c.user_sec_uid)}">sec_uid: ${esc(c.user_sec_uid)}</div>` : ""}
     <div class="wc-text">${esc(c.text || "")}</div>
     <div class="wc-meta">${ic("i-heart")}${fmtNum(c.like_count)}${c.is_reply ? " · 回复" : ""}</div>
   </div>`;
@@ -1880,13 +2469,15 @@ async function actFollow(action, edgeId) {
 
 // ── 私信 ──
 // ─── 私信实时接收(SSE):进 DM 面板订阅,新消息即时刷新;离开断开 ───
-let DM_SSE = null, DM_SSE_ACC = "";
+let DM_SSE = null, DM_SSE_ACC = "", DM_AUTO_TASKS = [], DM_AUTO_RULES = [], DM_REFRESH_TIMER = null;
 function startDmStream() {
   // 幂等:同账号已连就不重连(避免每次面板刷新/收到消息都断开重来)
-  if (DM_SSE && DM_SSE_ACC === HUB_ACC && DM_SSE.readyState !== 2) return;
+  if ((DM_SSE || DM_REFRESH_TIMER) && DM_SSE_ACC === HUB_ACC &&
+      (!DM_SSE || DM_SSE.readyState !== 2)) return;
   stopDmStream();
-  if (!HUB_ACC || PLATFORM !== "douyin") return;
+  if (!HUB_ACC) return;
   DM_SSE_ACC = HUB_ACC;
+  if (PLATFORM !== "douyin" && PLATFORM !== "xhs") return;
   try {
     DM_SSE = new EventSource(`/api/dm/stream?account_id=${HUB_ACC}`);
     DM_SSE.onmessage = (e) => {
@@ -1895,11 +2486,16 @@ function startDmStream() {
       // 当前打开的会话:实时刷新线程 + 标记已读(不让红点冒出来);否则只刷列表(会有红点)
       if (evt.conv_id === DM_CONV) { refreshDmMessages(); markDmRead(evt.conv_id); }
       else refreshDmConvs();
+      if (PLATFORM === "xhs" && evt.type === "auto_reply") refreshDmAutomation();
     };
     DM_SSE.onerror = () => { /* EventSource 自带重连 */ };
   } catch (_) {}
 }
-function stopDmStream() { if (DM_SSE) { try { DM_SSE.close(); } catch (_) {} DM_SSE = null; DM_SSE_ACC = ""; } }
+function stopDmStream() {
+  if (DM_SSE) { try { DM_SSE.close(); } catch (_) {} DM_SSE = null; }
+  if (DM_REFRESH_TIMER) { clearInterval(DM_REFRESH_TIMER); DM_REFRESH_TIMER = null; }
+  DM_SSE_ACC = "";
+}
 
 async function refreshDmConvs() {
   const box = $("dm-convs"); if (!box) return;
@@ -1924,10 +2520,16 @@ function convRow(c) {
 async function syncDm() {
   if (!HUB_ACC) { toast("请先选择账号", "err"); return; }
   await withBusy(evtBtn(), "同步中", async () => {
-    try { const r = await api("/api/accounts/" + HUB_ACC + "/dm/sync", { method: "POST" }); toast(`同步完成:抓到 ${r.fetched} 个会话,新增 ${r.added}`, "ok"); }
+    try {
+      const r = await api("/api/accounts/" + HUB_ACC + "/dm/sync", { method: "POST" });
+      if (r.skipped && r.cached) toast(`检查间隔保护中，已展示 ${r.fetched} 个现有会话`, "ok");
+      else if (r.skipped) toast(`检查间隔保护中，请稍后再试`, "ok");
+      else toast(`同步完成：${r.fetched} 个会话，新增消息 ${r.added}`, "ok");
+    }
     catch (e) { toast("同步失败:" + e.message, "err"); }
   });
   refreshDmConvs();
+  refreshDmAutomation();
 }
 async function openDmConv(convId) {
   DM_CONV = convId;
@@ -1935,12 +2537,102 @@ async function openDmConv(convId) {
   const thread = $("dm-thread");
   if (thread) thread.innerHTML = `<div class="empty"><div class="empty-t">加载聊天记录…</div></div>`;
   // 抖音:点开会话时无头拉历史(imapi get_by_conversation),落库后再渲染
-  if (PLATFORM === "douyin") {
+  if (PLATFORM === "douyin" || PLATFORM === "xhs") {
     try { await api(`/api/accounts/${HUB_ACC}/dm/conversations/${convId}/fetch-history`, { method: "POST" }); }
     catch (e) { /* 拉取失败也照常显示库里已有的(最后一条) */ }
   }
   markDmRead(convId);
   await refreshDmMessages();
+}
+
+function dmRuleSummary(rule) {
+  const trigger = rule.match_mode === "all" ? "全部文本消息" : (rule.keywords || []).join("、");
+  const mode = rule.review_before_send ? "先审核" : "自动入队";
+  return `<div class="dm-auto-row">
+    <div class="grow"><b>${esc(rule.name)}</b>${rule.enabled ? "" : " · 已停用"}<div class="sub">${esc(trigger)} · ${mode} · 延迟 ${rule.min_delay_seconds}-${rule.max_delay_seconds} 秒 · 冷却 ${Math.round(rule.cooldown_seconds / 3600)} 小时</div></div>
+    <button class="ghost sm" onclick="toggleDmRule(${rule.id})">${rule.enabled ? "停用" : "启用"}</button>
+    <button class="ghost sm" onclick="deleteDmRule(${rule.id})">删除</button>
+  </div>`;
+}
+function dmDraftSummary(task) {
+  return `<div class="dm-auto-row">
+    <div class="grow"><b>${esc(task.target_nick || "私信会话")}</b><div class="sub">${esc(task.content || "")}</div></div>
+    <button class="ghost sm" onclick="editDmDraft(${task.id})">编辑</button>
+    <button class="sm" onclick="approveDmDraft(${task.id})">通过</button>
+    <button class="ghost sm" onclick="cancelDmDraft(${task.id})">取消</button>
+  </div>`;
+}
+async function refreshDmAutomation() {
+  const panel = $("dm-auto-panel"), rulesBox = $("dm-auto-rules"), tasksBox = $("dm-auto-tasks");
+  if (!panel || !rulesBox || !tasksBox) return;
+  panel.style.display = PLATFORM === "xhs" ? "" : "none";
+  if (PLATFORM !== "xhs" || !HUB_ACC) return;
+  try {
+    const [rules, tasks, monitor] = await Promise.all([
+      api(`/api/dm/auto-reply-rules?account_id=${HUB_ACC}`),
+      api(`/api/account-actions?account_id=${HUB_ACC}&limit=100`),
+      api(`/api/accounts/${HUB_ACC}/dm/automation/status`)
+    ]);
+    const statusBox = $("dm-monitor-status");
+    if (statusBox) {
+      const live = monitor.realtime || {};
+      const state = live.connected ? "实时监听已连接" : (live.state === "reconnecting" ? "实时监听重连中" : "低频补偿监听");
+      statusBox.innerHTML = `<b>${state}</b> · 账号级监控 · 新会话自动纳入 · ${Math.round((monitor.fallback_interval_seconds || 600) / 60)} 分钟完整补偿检查`;
+    }
+    DM_AUTO_RULES = rules;
+    rulesBox.innerHTML = rules.length ? rules.map(dmRuleSummary).join("") : `<div class="hint">暂无规则。建议先使用“先审核”观察一段时间。</div>`;
+    DM_AUTO_TASKS = tasks;
+    const drafts = tasks.filter(t => t.action === "send_dm" && t.source_rule_id && t.status === "draft");
+    tasksBox.innerHTML = drafts.length ? drafts.map(dmDraftSummary).join("") : `<div class="hint">暂无待审核回复</div>`;
+  } catch (e) { rulesBox.innerHTML = `<div class="hint">加载失败：${esc(e.message)}</div>`; }
+}
+async function saveDmRule() {
+  if (!HUB_ACC) { toast("请先选择账号", "err"); return; }
+  const keywords = ($("dm-rule-keywords").value || "").split(/[，,]/).map(x => x.trim()).filter(Boolean);
+  const excludes = ($("dm-rule-excludes").value || "").split(/[，,]/).map(x => x.trim()).filter(Boolean);
+  const templates = ($("dm-rule-templates").value || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  const body = {
+    account_id: +HUB_ACC, name: ($("dm-rule-name").value || "自动回复").trim(),
+    enabled: true, match_mode: "keywords", keywords, exclude_keywords: excludes,
+    reply_templates: templates, review_before_send: !$("dm-rule-auto").checked,
+    min_delay_seconds: +$("dm-rule-delay-min").value || 75,
+    max_delay_seconds: +$("dm-rule-delay-max").value || 300,
+    cooldown_seconds: (+$("dm-rule-cooldown").value || 6) * 3600,
+    max_message_age_seconds: 1800
+  };
+  try {
+    await api("/api/dm/auto-reply-rules", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+    toast("自动回复规则已保存", "ok"); refreshDmAutomation();
+  } catch (e) { toast("保存失败：" + e.message, "err"); }
+}
+async function deleteDmRule(id) {
+  try { await api(`/api/dm/auto-reply-rules/${id}`, {method:"DELETE"}); toast("规则已删除", "ok"); refreshDmAutomation(); }
+  catch (e) { toast("删除失败：" + e.message, "err"); }
+}
+async function toggleDmRule(id) {
+  const rule = DM_AUTO_RULES.find(r => +r.id === +id); if (!rule) return;
+  const body = Object.assign({}, rule, {enabled: !rule.enabled});
+  try {
+    await api(`/api/dm/auto-reply-rules/${id}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    toast(body.enabled ? "规则已启用" : "规则已停用", "ok"); refreshDmAutomation();
+  } catch (e) { toast("更新失败：" + e.message, "err"); }
+}
+async function approveDmDraft(id) {
+  try { await api(`/api/account-actions/${id}/approve`, {method:"POST"}); toast("已进入限速发送队列", "ok"); refreshDmAutomation(); }
+  catch (e) { toast("通过失败：" + e.message, "err"); }
+}
+async function cancelDmDraft(id) {
+  try { await api(`/api/account-actions/${id}/cancel`, {method:"POST"}); toast("草稿已取消", "ok"); refreshDmAutomation(); }
+  catch (e) { toast("取消失败：" + e.message, "err"); }
+}
+async function editDmDraft(id) {
+  const current = (DM_AUTO_TASKS.find(t => +t.id === +id) || {}).content || "";
+  const content = prompt("编辑回复内容", current);
+  if (content === null || !content.trim()) return;
+  try {
+    await api(`/api/account-actions/${id}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({content:content.trim()})});
+    toast("草稿已更新", "ok"); refreshDmAutomation();
+  } catch (e) { toast("更新失败：" + e.message, "err"); }
 }
 // 标记已读:清红点,刷新左侧列表
 function markDmRead(convId) {
@@ -2067,11 +2759,24 @@ function applyDanmakuForm() {
 }
 async function refreshProfile(id) {
   const btn = evtBtn();
-  await withBusy(btn, "拉取中", async () => {
-    try { const r = await api("/api/accounts/" + id + "/refresh-profile", { method: "POST" }); const idLbl = (r.platform || PLATFORM) === "xhs" ? " · 小红书号 " : " · 抖音号 "; toast("资料已更新:" + (r.nickname || "") + (r.douyin_id ? idLbl + r.douyin_id : ""), "ok"); }
-    catch (e) { toast("刷新失败:" + e.message, "err"); }
+  await withBusy(btn, "\u83b7\u53d6\u4e2d", async () => {
+    try {
+      const r = await api("/api/accounts/" + id + "/refresh-profile", { method: "POST" });
+      if (r.skipped) {
+        toast("\u672c\u6b21\u672a\u6267\u884c\u8d44\u6599\u5237\u65b0:" + (r.reason || "\u8d26\u53f7\u5f53\u524d\u4e0d\u53ef\u63a2\u6d4b"), "info");
+        return;
+      }
+      if ((r.platform || PLATFORM) === "xhs" && r.login_scope === "creator" && !r.has_read_login) {
+        toast("创作平台登录有效，资料已更新；主站读取登录尚未配置", "info", 8000);
+        return;
+      }
+      const idLbl = (r.platform || PLATFORM) === "xhs" ? " \u00b7 \u5c0f\u7ea2\u4e66\u53f7 " : " \u00b7 \u6296\u97f3\u53f7 ";
+      toast("\u8d44\u6599\u5df2\u66f4\u65b0\uff0c\u767b\u5f55\u72b6\u6001\u5df2\u6062\u590d:" + (r.nickname || "") + (r.douyin_id ? idLbl + r.douyin_id : ""), "ok");
+    } catch (e) {
+      toast("\u5237\u65b0\u5931\u8d25:" + e.message, "err");
+    }
   });
-  refreshAccounts();
+  await refreshAccounts();
 }
 async function setProxy(id) {
   const a = ACCOUNTS.find(x => x.id === id);
@@ -2112,6 +2817,382 @@ async function setProxy(id) {
     }
     refreshAccounts(); refreshProxies();
   } catch (e) { toast("设置失败:" + e.message, "err"); }
+}
+
+async function setBrowserBackend(id) {
+  const account = ACCOUNTS.find(item => item.id === id);
+  if (!account) return;
+  let catalog;
+  try {
+    catalog = await api("/api/browser-backends");
+  } catch (e) {
+    toast("读取浏览器环境失败:" + e.message, "err");
+    return;
+  }
+  const localOnly = account.platform === "xhs";
+  const options = browserChoiceOptions(catalog, { localOnly });
+  const currentChoice = localOnly ? "local"
+    : account.browser_backend === "fingerprint_chromium" && account.browser_runtime_id
+    ? `fingerprint_chromium::${account.browser_runtime_id}`
+    : (account.browser_backend || "default");
+  const selected = await uiSelect({
+    title: "账号浏览器环境",
+    hint: localOnly
+      ? `${account.nickname} · 小红书固定使用系统 Chrome/CDP 原生环境。`
+      : `${account.nickname} · 切换时会关闭该账号当前浏览器，下次任务使用新内核。`,
+    options,
+    value: currentChoice,
+  });
+  if (selected === null) return;
+  try {
+    const choice = browserChoiceParts(selected);
+    const result = await api(`/api/accounts/${id}/browser-backend`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        browser_backend: choice.backend,
+        browser_runtime_id: choice.runtimeId,
+      }),
+    });
+    toast("浏览器环境已切换：" + loginEnvironmentText(result.environment), "ok");
+    refreshAccounts();
+  } catch (e) {
+    toast("切换失败:" + e.message, "err");
+  }
+}
+
+async function refreshBrowserRuntimes() {
+  const table = $("runtime-table");
+  if (!table) return;
+  try {
+    const result = await api("/api/browser-runtimes");
+    BROWSER_RUNTIMES = result.runtimes || [];
+    let rememberedRoot = "";
+    try { rememberedRoot = localStorage.getItem("creatorhub-browser-runtime-root") || ""; } catch (e) {}
+    BROWSER_RUNTIME_ROOT = rememberedRoot || result.root || "";
+    const rootLabel = $("runtime-root");
+    if (rootLabel) rootLabel.textContent = BROWSER_RUNTIME_ROOT || "尚未设置，扫描时输入";
+    table.querySelector("tbody").innerHTML = BROWSER_RUNTIMES.map(runtime => {
+      const state = !runtime.enabled ? "已停用" : runtime.available
+        ? (runtime.status === "ok" ? "测试通过" : "可用") : "文件缺失";
+      const stateClass = runtime.enabled && runtime.available
+        ? "active" : runtime.status === "bad" ? "invalid" : "bare";
+      return `<tr>
+        <td>
+          <div><b>${esc(runtime.name || runtime.runtime_id)}</b>
+            ${runtime.is_default ? '<span class="pill active">默认</span>' : ""}
+            <span class="pill ${stateClass}">${esc(state)}</span>
+          </div>
+          <div class="mut" style="font-size:11px;margin-top:3px">版本 ${esc(runtime.version || "未知")} · ${esc(runtime.runtime_id)}</div>
+          <div class="mut" style="font-size:11px;margin-top:3px;word-break:break-all"><code>${esc(runtime.executable_path)}</code></div>
+          ${runtime.last_error ? `<div style="font-size:11px;margin-top:3px;color:var(--danger)">${esc(runtime.last_error)}</div>` : ""}
+        </td>
+        <td class="acttd">
+          <button class="ghost sm" onclick="testBrowserRuntime('${esc(runtime.runtime_id)}')">测试启动</button>
+          ${runtime.is_default ? "" : `<button class="ghost sm" onclick="setDefaultBrowserRuntime('${esc(runtime.runtime_id)}')" ${runtime.enabled ? "" : "disabled"}>设为默认</button>`}
+          <button class="ghost sm" onclick="toggleBrowserRuntime('${esc(runtime.runtime_id)}', ${runtime.enabled ? "false" : "true"})">${runtime.enabled ? "停用" : "启用"}</button>
+          <button class="ghost sm danger" onclick="deleteBrowserRuntime('${esc(runtime.runtime_id)}')">${ic("i-trash")}移除</button>
+        </td>
+      </tr>`;
+    }).join("") || empty(2, "尚未发现指纹内核", "i-inbox", "点击扫描目录，或手动添加 chrome.exe");
+  } catch (e) {
+    table.querySelector("tbody").innerHTML = empty(2, "读取内核列表失败", "i-info", e.message);
+  }
+}
+
+async function scanBrowserRuntimes() {
+  const button = evtBtn();
+  const root = await uiPrompt({
+    title: "扫描 Chromium 内核目录",
+    hint: "输入当前机器上存放一个或多个 Chromium 版本的目录。路径按本机配置，不限定盘符或操作系统。",
+    value: BROWSER_RUNTIME_ROOT,
+    placeholder: "例如：浏览器安装目录或统一内核目录",
+  });
+  if (root === null) return;
+  if (!root.trim()) { toast("请输入要扫描的目录", "err"); return; }
+  await withBusy(button, "扫描中", async () => {
+    try {
+      const result = await api("/api/browser-runtimes/scan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: root.trim() }),
+      });
+      BROWSER_RUNTIME_ROOT = result.root || root.trim();
+      try { localStorage.setItem("creatorhub-browser-runtime-root", BROWSER_RUNTIME_ROOT); } catch (e) {}
+      toast(`扫描完成：发现 ${result.found} 个内核，新增 ${result.created} 个`, "ok");
+      await refreshBrowserRuntimes();
+    } catch (e) { toast("扫描失败：" + e.message, "err"); }
+  });
+}
+
+async function addBrowserRuntime() {
+  const path = await uiPrompt({
+    title: "添加 Chromium 内核",
+    hint: "填写当前机器上 chrome/chromium 主程序的完整路径。程序只记录路径，不复制或移动浏览器文件。",
+    value: "",
+    placeholder: "chrome.exe、chrome 或 chromium 的完整路径",
+  });
+  if (path === null || !path.trim()) return;
+  try {
+    const result = await api("/api/browser-runtimes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ executable_path: path.trim() }),
+    });
+    toast(`${result.created ? "已添加" : "已更新"}：${result.runtime.name}`, "ok");
+    await refreshBrowserRuntimes();
+  } catch (e) { toast("添加失败：" + e.message, "err"); }
+}
+
+async function testBrowserRuntime(runtimeId) {
+  const button = evtBtn();
+  await withBusy(button, "测试中", async () => {
+    try {
+      const result = await api(`/api/browser-runtimes/${encodeURIComponent(runtimeId)}/test`, { method: "POST" });
+      toast(`内核启动正常：${result.user_agent || runtimeId}`, "ok", 7000);
+    } catch (e) { toast("内核测试失败：" + e.message, "err", 7000); }
+    await refreshBrowserRuntimes();
+  });
+}
+
+async function setDefaultBrowserRuntime(runtimeId) {
+  try {
+    await api(`/api/browser-runtimes/${encodeURIComponent(runtimeId)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_default: true }),
+    });
+    toast("默认指纹内核已切换", "ok");
+    await refreshBrowserRuntimes(); await refreshAccounts();
+  } catch (e) { toast("切换失败：" + e.message, "err"); }
+}
+
+async function toggleBrowserRuntime(runtimeId, enabled) {
+  try {
+    await api(`/api/browser-runtimes/${encodeURIComponent(runtimeId)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    toast(enabled ? "内核已启用" : "内核已停用", "ok");
+    await refreshBrowserRuntimes(); await refreshAccounts();
+  } catch (e) { toast("操作失败：" + e.message, "err"); }
+}
+
+async function deleteBrowserRuntime(runtimeId) {
+  if (!await uiConfirm({
+    title: "移除内核记录",
+    message: "仅移除 CreatorHub 中的内核记录，不会删除原安装目录中的浏览器文件。",
+    okText: "移除",
+  })) return;
+  try {
+    await api(`/api/browser-runtimes/${encodeURIComponent(runtimeId)}`, { method: "DELETE" });
+    toast("内核记录已移除", "ok");
+    await refreshBrowserRuntimes();
+  } catch (e) { toast("移除失败：" + e.message, "err"); }
+}
+
+function uiFingerprintEditor(account, fp, options = {}) {
+  const preLogin = Boolean(options.preLogin);
+  const disabled = new Set(fp.disable_spoofing || []);
+  const runtimeVersion = String((account.environment || {}).runtime_version || "");
+  const runtimeMajor = Number(runtimeVersion.split(".")[0]) || 0;
+  const gpuCustomSupported = runtimeMajor >= 139 && runtimeMajor < 144;
+  const modeButtons = (name, options, current) => `<div class="fp-segment" data-fp-mode="${esc(name)}" role="group">` +
+    options.map(option => `<button type="button" class="${option.value === current ? "active" : ""}" data-value="${esc(option.value)}" aria-pressed="${option.value === current ? "true" : "false"}"${option.disabled ? " disabled" : ""}>${esc(option.label)}</button>`).join("") + `</div>`;
+  const surfaceMode = (name, label, custom = false) => {
+    let current = disabled.has(name) ? "off" : "random";
+    if (custom && gpuCustomSupported && (fp.gpu_vendor || fp.gpu_renderer)) current = "custom";
+    const options = [{ value: "random", label: "随机" }];
+    if (custom) options.push({ value: "custom", label: "自定义", disabled: !gpuCustomSupported });
+    options.push({ value: "off", label: "关闭" });
+    return `<div class="fp-config-row"><div><b>${esc(label)}</b><span>每个账号使用稳定且不同的取值</span></div>${modeButtons(name, options, current)}</div>`;
+  };
+  const platformMode = fp.platform ? "custom" : "auto";
+  const brandMode = fp.brand ? "custom" : "auto";
+  const cpuMode = Number(fp.hardware_concurrency) > 0 ? "custom" : "auto";
+  return new Promise(resolve => {
+    _uiResolve = resolve; _uiCancelVal = null;
+    $("ui-body").innerHTML = `
+      <div class="hint" style="margin:0 0 14px">${preLogin
+        ? "自动项会在启动前根据所选代理或本机出口 IP 生成；切换为自定义后可在第一次登录前逐项覆盖。登录成功后，此配置会随账号和独立 Profile 一起保存。"
+        : "自动项会跟随来源 IP 生成；切换为自定义后可逐项编辑。保存后关闭该账号当前浏览器，下次启动应用新配置。"}</div>
+      <div class="fp-edit-tabs" role="tablist" aria-label="浏览器指纹设置">
+        <button type="button" class="ghost sm active" role="tab" aria-selected="true" data-fp-tab="basic">基础设置</button>
+        <button type="button" class="ghost sm" role="tab" aria-selected="false" data-fp-tab="advanced">高级设置</button>
+      </div>
+      <div class="fp-edit-panel active" data-fp-panel="basic">
+        <div class="fp-runtime-summary">
+          <div><span>浏览器内核</span><b>${esc(runtimeVersion || "跟随所选运行时")}</b></div>
+          <div><span>设备类型</span><b>桌面设备</b></div>
+          <div><span>指纹编号</span><b>${esc(fp.fingerprint_id || "-")}</b></div>
+        </div>
+        <div class="fp-settings">
+          <div class="fp-config-row"><div><b>操作系统</b><span>影响 navigator.platform 与 Client Hints</span></div>${modeButtons("platform", [{value:"auto",label:"自动"},{value:"custom",label:"自定义"}], platformMode)}</div>
+          <div class="form-grid fp-mode-fields" data-fp-custom="platform">
+            <div class="form-field"><label for="fp-edit-platform">系统类型</label><select id="fp-edit-platform"><option value="windows"${fp.platform === "windows" ? " selected" : ""}>Windows</option><option value="macos"${fp.platform === "macos" ? " selected" : ""}>macOS</option><option value="linux"${fp.platform === "linux" ? " selected" : ""}>Linux</option></select></div>
+            <div class="form-field"><label for="fp-edit-platform-version">系统版本</label><input id="fp-edit-platform-version" value="${esc(fp.platform_version || "")}" placeholder="例如 10.0.19045"></div>
+          </div>
+          <div class="fp-config-row"><div><b>浏览器品牌与版本</b><span>影响 User-Agent 与 UA Data</span></div>${modeButtons("brand", [{value:"auto",label:"自动"},{value:"custom",label:"自定义"}], brandMode)}</div>
+          <div class="form-grid fp-mode-fields" data-fp-custom="brand">
+            <div class="form-field"><label for="fp-edit-brand">浏览器品牌</label><input id="fp-edit-brand" value="${esc(fp.brand || "")}" placeholder="Chrome / Edge"></div>
+            <div class="form-field"><label for="fp-edit-brand-version">浏览器版本</label><input id="fp-edit-brand-version" value="${esc(fp.brand_version || "")}" placeholder="例如 148.0.0.0"></div>
+          </div>
+          ${fp.actual_ua ? `<div class="fp-readonly"><span>User Agent</span><code>${esc(fp.actual_ua)}</code></div>` : ""}
+          <div class="fp-config-row"><div><b>语言</b><span>可跟随来源 IP 自动匹配</span></div>${modeButtons("language", [{value:"auto",label:"跟随 IP"},{value:"custom",label:"自定义"}], fp.language_mode || "auto")}</div>
+          <div class="form-grid fp-mode-fields" data-fp-custom="language">
+            <div class="form-field"><label for="fp-edit-locale">浏览器语言</label><input id="fp-edit-locale" value="${esc(fp.locale || "zh-CN")}"></div>
+            <div class="form-field"><label for="fp-edit-accept">Accept-Language</label><input id="fp-edit-accept" value="${esc(fp.accept_languages || "")}" placeholder="例如 zh-CN,zh"></div>
+          </div>
+          <div class="fp-config-row"><div><b>时区</b><span>可跟随来源 IP 匹配 IANA 时区</span></div>${modeButtons("timezone", [{value:"auto",label:"跟随 IP"},{value:"custom",label:"自定义"}], fp.timezone_mode || "auto")}</div>
+          <div class="fp-mode-fields" data-fp-custom="timezone"><div class="form-field"><label for="fp-edit-timezone">IANA 时区</label><input id="fp-edit-timezone" value="${esc(fp.timezone || "Asia/Shanghai")}"></div></div>
+          <div class="fp-config-row"><div><b>WebRTC</b><span>隐藏模式阻止非代理 UDP 暴露本机 IP</span></div>${modeButtons("webrtc", [{value:"conceal",label:"隐藏"},{value:"allow",label:"允许"}], fp.webrtc_mode || "conceal")}</div>
+          <div class="fp-config-row"><div><b>地理位置权限</b><span>控制网站读取浏览器定位的权限</span></div>${modeButtons("geo-permission", [{value:"ask",label:"询问"},{value:"allow",label:"允许"},{value:"deny",label:"禁止"}], fp.geolocation_permission || "allow")}</div>
+          <div class="fp-config-row"><div><b>地理位置数据</b><span>可跟随来源 IP 自动生成坐标</span></div>${modeButtons("location", [{value:"auto",label:"跟随 IP"},{value:"custom",label:"自定义"}], fp.location_mode || "auto")}</div>
+          <div class="form-grid fp-mode-fields" data-fp-custom="location">
+            <div class="form-field"><label for="fp-edit-ip">来源 IP</label><input id="fp-edit-ip" value="${esc(fp.source_ip || "")}"></div>
+            <div class="form-field"><label for="fp-edit-country">国家/地区</label><input id="fp-edit-country" value="${esc(fp.country || "")}"></div>
+            <div class="form-field"><label for="fp-edit-region">区域</label><input id="fp-edit-region" value="${esc(fp.region || "")}"></div>
+            <div class="form-field"><label for="fp-edit-city">城市</label><input id="fp-edit-city" value="${esc(fp.city || "")}"></div>
+            <div class="form-field"><label for="fp-edit-lat">纬度</label><input id="fp-edit-lat" type="number" min="-90" max="90" step="0.000001" value="${Number(fp.geo_lat) || 0}"></div>
+            <div class="form-field"><label for="fp-edit-lon">经度</label><input id="fp-edit-lon" type="number" min="-180" max="180" step="0.000001" value="${Number(fp.geo_lon) || 0}"></div>
+          </div>
+          <div class="fp-config-row"><div><b>窗口尺寸</b><span>设置浏览器窗口打开时的大小</span></div>${modeButtons("viewport", [{value:"auto",label:"自动"},{value:"custom",label:"自定义"}], fp.viewport_mode || "auto")}</div>
+          <div class="form-grid fp-mode-fields" data-fp-custom="viewport">
+            <div class="form-field"><label for="fp-edit-vw">宽度</label><input id="fp-edit-vw" type="number" min="320" max="7680" value="${Number(fp.viewport_w) || 1280}"></div>
+            <div class="form-field"><label for="fp-edit-vh">高度</label><input id="fp-edit-vh" type="number" min="240" max="4320" value="${Number(fp.viewport_h) || 800}"></div>
+          </div>
+        </div>
+      </div>
+      <div class="fp-edit-panel" data-fp-panel="advanced">
+        <div class="fp-settings">
+          <div class="fp-config-row"><div><b>指纹种子</b><span>Canvas、Audio 等随机值由种子稳定派生</span></div><div class="fp-seed-badge">${preLogin ? "内核启动时生成" : `uint32 ${esc(String(fp.engine_seed ?? ""))}`}</div></div>
+          <div class="form-field"><label for="fp-edit-seed">种子值</label><input id="fp-edit-seed" value="${esc(fp.seed || "")}" maxlength="128"></div>
+          ${surfaceMode("font", "字体")}
+          ${surfaceMode("canvas", "Canvas")}
+          ${surfaceMode("gpu", "WebGL / GPU", true)}
+          <div class="form-grid fp-mode-fields" data-fp-custom="gpu">
+            <div class="form-field"><label for="fp-edit-gpu-vendor">WebGL Vendor</label><input id="fp-edit-gpu-vendor" value="${esc(fp.gpu_vendor || "")}" placeholder="例如 Google Inc. (Intel)"></div>
+            <div class="form-field"><label for="fp-edit-gpu-renderer">WebGL Renderer</label><input id="fp-edit-gpu-renderer" value="${esc(fp.gpu_renderer || "")}" placeholder="仅 139–143 内核支持"></div>
+          </div>
+          ${surfaceMode("audio", "AudioContext")}
+          ${surfaceMode("clientrects", "ClientRects")}
+          <div class="fp-config-row"><div><b>硬件并发数</b><span>navigator.hardwareConcurrency</span></div>${modeButtons("cpu", [{value:"auto",label:"自动"},{value:"custom",label:"自定义"}], cpuMode)}</div>
+          <div class="fp-mode-fields" data-fp-custom="cpu"><div class="form-field"><label for="fp-edit-cpu">CPU 逻辑核心</label><input id="fp-edit-cpu" type="number" min="1" max="256" value="${Number(fp.hardware_concurrency) || 8}"></div></div>
+          <div class="form-field"><label for="fp-edit-extra">附加启动参数</label><textarea id="fp-edit-extra" rows="3" placeholder="每行一个安全参数，例如 --mute-audio">${esc(fp.extra_args || "")}</textarea><div class="mut" style="font-size:11px">仅接受安全的 Chromium 参数；代理、调试端口、用户目录和指纹核心参数由系统统一管理。</div></div>
+        </div>
+      </div>
+      `;
+    enhanceAllSelects($("ui-body"));
+    const body = $("ui-body");
+    const selectedMode = name => {
+      const active = body.querySelector(`[data-fp-mode="${name}"] button.active`);
+      return active ? active.dataset.value : "";
+    };
+    const syncCustomFields = name => {
+      const enabled = selectedMode(name) === "custom";
+      body.querySelectorAll(`[data-fp-custom="${name}"] input,[data-fp-custom="${name}"] select,[data-fp-custom="${name}"] textarea`).forEach(control => {
+        control.disabled = !enabled;
+        if (control._csSync) control._csSync();
+      });
+      body.querySelectorAll(`[data-fp-custom="${name}"]`).forEach(group => group.classList.toggle("enabled", enabled));
+    };
+    body.querySelectorAll("[data-fp-mode] button").forEach(button => {
+      button.addEventListener("click", () => {
+        if (button.disabled) return;
+        const segment = button.closest("[data-fp-mode]");
+        segment.querySelectorAll("button").forEach(item => {
+          const active = item === button;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        syncCustomFields(segment.dataset.fpMode);
+      });
+    });
+    ["platform", "brand", "language", "timezone", "location", "viewport", "gpu", "cpu"].forEach(syncCustomFields);
+    body.querySelectorAll("[data-fp-tab]").forEach(tab => {
+      tab.addEventListener("click", () => {
+        const selected = tab.dataset.fpTab;
+        body.querySelectorAll("[data-fp-tab]").forEach(item => {
+          const active = item.dataset.fpTab === selected;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        body.querySelectorAll("[data-fp-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.fpPanel === selected));
+        body.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    });
+    const value = id => ($(id) || {}).value || "";
+    const number = (id, fallback = 0) => { const parsed = Number(value(id)); return Number.isFinite(parsed) ? parsed : fallback; };
+    _uiGetVal = () => {
+      const platformCustom = selectedMode("platform") === "custom";
+      const brandCustom = selectedMode("brand") === "custom";
+      const gpuCustom = selectedMode("gpu") === "custom";
+      const surfaces = ["font", "audio", "canvas", "clientrects", "gpu"];
+      return { action: "save", data: {
+        seed: value("fp-edit-seed"), source_ip: value("fp-edit-ip"),
+        country: value("fp-edit-country"), region: value("fp-edit-region"), city: value("fp-edit-city"),
+        timezone: value("fp-edit-timezone"), locale: value("fp-edit-locale"), accept_languages: value("fp-edit-accept"),
+        viewport_w: number("fp-edit-vw", 1280), viewport_h: number("fp-edit-vh", 800),
+        geo_lat: number("fp-edit-lat"), geo_lon: number("fp-edit-lon"),
+        platform: platformCustom ? value("fp-edit-platform") : "",
+        platform_version: platformCustom ? value("fp-edit-platform-version") : "",
+        brand: brandCustom ? value("fp-edit-brand") : "",
+        brand_version: brandCustom ? value("fp-edit-brand-version") : "",
+        hardware_concurrency: selectedMode("cpu") === "custom" ? number("fp-edit-cpu", 8) : 0,
+        gpu_vendor: gpuCustom ? value("fp-edit-gpu-vendor") : "",
+        gpu_renderer: gpuCustom ? value("fp-edit-gpu-renderer") : "",
+        disable_spoofing: surfaces.filter(name => selectedMode(name) === "off"),
+        language_mode: selectedMode("language") || "auto",
+        timezone_mode: selectedMode("timezone") || "auto",
+        viewport_mode: selectedMode("viewport") || "auto",
+        location_mode: selectedMode("location") || "auto",
+        geolocation_permission: selectedMode("geo-permission") || "allow",
+        webrtc_mode: selectedMode("webrtc") || "conceal",
+        extra_args: value("fp-edit-extra"),
+      }};
+    };
+    _uiOpen(
+      `${account.nickname} · ${preLogin ? "登录前指纹配置" : "浏览器指纹"}`,
+      preLogin ? "确认后使用这套指纹创建独立登录环境" : `指纹 ${fp.fingerprint_id || "-"}`,
+      { okText: preLogin ? "使用此指纹登录" : "保存配置", wide: true },
+    );
+    const autoButton = document.createElement("button");
+    autoButton.id = "ui-extra-action";
+    autoButton.type = "button";
+    autoButton.className = "ghost";
+    autoButton.textContent = preLogin ? "使用出口 IP 自动配置" : "按 IP 自动生成";
+    autoButton.addEventListener("click", () => _uiClose({ action: "auto" }));
+    $("ui-actions").insertBefore(autoButton, $("ui-actions").firstElementChild);
+  });
+}
+
+async function manageFingerprint(id) {
+  const account = ACCOUNTS.find(item => item.id === id);
+  if (!account) return;
+  let current;
+  try { current = await api(`/api/accounts/${id}/fingerprint`); }
+  catch (e) { toast("读取指纹失败:" + e.message, "err"); return; }
+  const action = await uiFingerprintEditor(account, current);
+  if (!action) return;
+  if (action.action === "auto") {
+    const confirmed = await uiConfirm({
+      title: "恢复自动指纹",
+      message: "将根据账号当前代理或本机出口 IP 重新计算地域、时区、语言、窗口与种子派生项，并清除手动覆盖。",
+      okText: "恢复自动",
+    });
+    if (!confirmed) return;
+    try {
+      const result = await api(`/api/accounts/${id}/fingerprint/from-ip`, { method: "POST" });
+      toast(`已恢复自动指纹：${result.fingerprint.fingerprint_id || "-"}`, "ok", 7000);
+      await refreshAccounts();
+    } catch (e) { toast("自动生成失败:" + e.message, "err", 8000); }
+    return;
+  }
+  try {
+    const result = await api(`/api/accounts/${id}/fingerprint`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action.data),
+    });
+    toast(`指纹已保存：${result.fingerprint.fingerprint_id || "-"}`, "ok", 7000);
+    await refreshAccounts();
+  } catch (e) { toast("保存指纹失败:" + e.message, "err", 8000); }
 }
 
 // ─── 代理池 ───
@@ -2268,12 +3349,13 @@ async function testProxy(id) {
   } catch (e) { toast("测试失败:" + e.message, "err"); }
   finally { btn.disabled = false; btn.textContent = old; refreshAccounts(); }
 }
-async function relogin(id) {
+async function relogin(id, scope = "auto") {
   const btn = evtBtn();
   await withBusy(btn, "启动中", async () => {
     try {
-      const res = await api("/api/accounts/" + id + "/relogin/start", { method: "POST" });
-      toast("已打开浏览器窗口,请扫码重新登录该账号", "info");
+      const res = await api("/api/accounts/" + id + "/relogin/start?scope=" + encodeURIComponent(scope), { method: "POST" });
+      const label = res.login_scope === "creator" ? "创作平台" : "主站读取";
+      toast("已打开" + label + "浏览器窗口,请扫码登录该账号", "info");
       pollReloginTask(res.task_id);
     } catch (e) { toast("启动失败:" + e.message, "err"); }
   });
@@ -2293,7 +3375,7 @@ function pollReloginTask(tid) {
         if (r.profile_status === "invalid") {
           toast("登录校验未通过，请重新扫码", "err");
         } else {
-          const suffix = r.profile_status === "error" ? "（资料稍后同步）" : "";
+          const suffix = ["error", "deferred"].includes(r.profile_status) ? "（资料可稍后刷新）" : "";
           toast("重新登录成功 " + (r.nickname || "") + suffix, r.profile_status === "error" ? "info" : "ok");
         }
         refreshAccounts(); return;
@@ -2691,8 +3773,9 @@ function updateShareHistorySelBar() {
   $("sd-history-selbar").style.display = count ? "inline-flex" : "none";
   const ids = [...document.querySelectorAll('#sd-history-body input[type="checkbox"]')].map(cb => +cb.dataset.id).filter(Boolean);
   const allSelected = ids.length > 0 && ids.every(id => selShareHistory.has(id));
+  const selectedOnPage = ids.filter(id => selShareHistory.has(id)).length;
   const toggle = $("sd-history-selall-btn"); if (toggle) toggle.textContent = allSelected ? "取消全选" : "全选";
-  const checkbox = $("sd-history-selall"); if (checkbox) checkbox.checked = allSelected;
+  const checkbox = $("sd-history-selall"); if (checkbox) { checkbox.checked = allSelected; checkbox.indeterminate = selectedOnPage > 0 && !allSelected; }
 }
 function renderShareHistoryRows(resetPage = false) {
   if (resetPage) SHARE_HISTORY_PAGE = 1;
@@ -3030,11 +4113,19 @@ async function createCollection() {
   const accountId = Number($("col-account").value || 0);
   const contentLimit = Number($("col-content-limit").value || 0);
   const commentLimit = Number($("col-comment-limit").value || 0);
+  const pageLimit = Number($("col-page-limit").value || 0);
+  const stagnantPages = Number($("col-stagnant-pages").value || 0);
+  const minLikes = Number($("col-min-likes").value || 0);
+  const minComments = Number($("col-min-comments").value || 0);
   let valid = true;
   valid = setFieldError($("col-keywords"), !keywords.length ? "请至少填写一个关键词" : keywords.length > 20 ? "单个任务最多 20 个关键词" : "") && valid;
   valid = setFieldError($("col-account"), !accountId ? "请选择一个已登录账号" : "") && valid;
   valid = setFieldError($("col-content-limit"), contentLimit < 1 || contentLimit > 100 ? "请输入 1–100" : "") && valid;
   valid = setFieldError($("col-comment-limit"), commentLimit < 0 || commentLimit > 200 ? "请输入 0–200" : "") && valid;
+  valid = setFieldError($("col-page-limit"), pageLimit < 1 || pageLimit > 40 ? "请输入 1–40" : "") && valid;
+  valid = setFieldError($("col-stagnant-pages"), stagnantPages < 1 || stagnantPages > 8 ? "请输入 1–8" : "") && valid;
+  valid = setFieldError($("col-min-likes"), minLikes < 0 ? "请输入非负整数" : "") && valid;
+  valid = setFieldError($("col-min-comments"), minComments < 0 ? "请输入非负整数" : "") && valid;
   if (!valid) {
     const first = document.querySelector('[data-panel="collections"] [aria-invalid="true"]');
     if (first) first.focus();
@@ -3048,6 +4139,13 @@ async function createCollection() {
         body: JSON.stringify({
           platform: "douyin", account_id: accountId, keywords,
           max_contents_per_keyword: contentLimit,
+          max_pages_per_keyword: pageLimit,
+          stagnant_pages: stagnantPages,
+          search_sort: $("col-sort").value || "general",
+          publish_time: $("col-publish-time").value || "all",
+          content_type: $("col-content-type").value || "all",
+          min_likes: minLikes,
+          min_comments: minComments,
           max_comments_per_content: commentLimit,
           include_replies: $("col-replies").checked,
           download_media: $("col-download").checked,
@@ -3087,10 +4185,14 @@ function renderCollectionJobs() {
     const canRetry = ["done", "partial", "failed", "canceled"].includes(job.status);
     const canEdit = canRetry && job.platform === "douyin";
     const errorText = collectionLastError(job);
+    const sortLabel = { general: "综合", latest: "最新", most_liked: "最多点赞" }[job.search_sort] || "综合";
+    const timeLabel = { all: "不限时间", day: "一天内", week: "一周内", half_year: "半年内" }[job.publish_time] || "不限时间";
+    const typeLabel = { all: "全部类型", video: "视频", images: "图文" }[job.content_type] || "全部类型";
+    const threshold = [Number(job.min_likes) > 0 ? `≥${fmtNum(job.min_likes)} 赞` : "", Number(job.min_comments) > 0 ? `≥${fmtNum(job.min_comments)} 评` : ""].filter(Boolean).join(" · ");
     return `<article class="collection-task" role="listitem" aria-label="任务 ${job.id}，${status.label}">
       <div class="collection-task-meta"><div><span class="collection-task-label">任务状态</span><span class="pill ${status.cls}">${status.label}</span></div><time class="collection-task-created" datetime="${esc(job.created_at || "")}">${collectionDate(job.created_at)}</time></div>
       <div class="collection-task-keywords"><span class="collection-task-label">关键词</span><div class="keyword-stack">${keywords}</div>${job.current_keyword ? `<div class="collection-step">当前：${esc(job.current_keyword)}</div>` : ""}</div>
-      <div class="collection-task-config"><span class="collection-task-label">采集配置</span><div class="collection-task-config-main">${job.max_contents_per_keyword} 作品/词 · ${job.max_comments_per_content} 评论/作品</div><div class="collection-task-config-sub">${job.include_replies ? "含二级评论 · " : ""}${job.download_media ? "下载媒体" : "仅采数据"}</div></div>
+      <div class="collection-task-config"><span class="collection-task-label">采集配置</span><div class="collection-task-config-main">${job.max_contents_per_keyword} 作品/词 · ${job.max_pages_per_keyword || 12} 深度页 · ${sortLabel}</div><div class="collection-task-config-sub">${timeLabel} · ${typeLabel}${threshold ? ` · ${threshold}` : ""} · ${job.max_comments_per_content} 评论/作品<br>${job.include_replies ? "含二级评论 · " : ""}${job.download_media ? "下载媒体" : "仅采数据"} · 连续 ${job.stagnant_pages || 3} 页无新增停止</div></div>
       <div class="collection-task-progress"><span class="collection-task-label">执行进度</span><div class="job-progress"><div class="job-progress-head"><span>${esc(job.current_step || "等待执行")}</span><b>${job.content_count}/${job.planned_content_count}</b></div><div class="progress-track" role="progressbar" aria-label="任务 ${job.id} 进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><div class="progress-fill" style="width:${percent}%"></div></div><div class="collection-step">已采评论 ${fmtNum(job.comment_count)}</div></div></div>
       ${job.error_count ? `<button type="button" class="collection-task-error" onclick="openCollectionResults(${job.id})" title="${esc(errorText)}">${ic("i-info")}<span class="collection-task-error-text">${job.error_count} 条异常 · ${esc(errorText)}</span><span class="collection-task-error-link">查看详情</span></button>` : ""}
       <div class="collection-task-actions" aria-label="任务 ${job.id} 操作">
@@ -3131,6 +4233,13 @@ async function editCollection(jobId, draft = null) {
     account_id: job.account_id,
     keywords: (job.keywords || []).join("\n"),
     max_contents_per_keyword: job.max_contents_per_keyword,
+    max_pages_per_keyword: job.max_pages_per_keyword || 12,
+    stagnant_pages: job.stagnant_pages || 3,
+    search_sort: job.search_sort || "general",
+    publish_time: job.publish_time || "all",
+    content_type: job.content_type || "all",
+    min_likes: Number(job.min_likes || 0),
+    min_comments: Number(job.min_comments || 0),
     max_comments_per_content: job.max_comments_per_content,
     include_replies: !!job.include_replies,
     download_media: !!job.download_media,
@@ -3148,6 +4257,15 @@ async function editCollection(jobId, draft = null) {
         <div class="form-field"><label for="ecol-content-limit">每词作品上限</label><input id="ecol-content-limit" type="number" min="1" max="100" value="${Number(initial.max_contents_per_keyword) || 20}"></div>
         <div class="form-field"><label for="ecol-comment-limit">每作品评论上限</label><input id="ecol-comment-limit" type="number" min="0" max="200" value="${Number(initial.max_comments_per_content) || 0}"></div>
       </div>
+      <div class="form-grid collection-filter-grid">
+        <div class="form-field"><label for="ecol-page-limit">每词采集深度</label><input id="ecol-page-limit" type="number" min="1" max="40" value="${Number(initial.max_pages_per_keyword) || 12}"></div>
+        <div class="form-field"><label for="ecol-sort">搜索排序</label><select id="ecol-sort"><option value="general">综合排序</option><option value="latest">最新发布</option><option value="most_liked">最多点赞</option></select></div>
+        <div class="form-field"><label for="ecol-publish-time">发布时间</label><select id="ecol-publish-time"><option value="all">不限</option><option value="day">一天内</option><option value="week">一周内</option><option value="half_year">半年内</option></select></div>
+        <div class="form-field"><label for="ecol-content-type">内容类型</label><select id="ecol-content-type"><option value="all">全部作品</option><option value="video">视频</option><option value="images">图文 / 图集</option></select></div>
+        <div class="form-field"><label for="ecol-min-likes">最低点赞数</label><input id="ecol-min-likes" type="number" min="0" value="${Number(initial.min_likes) || 0}"></div>
+        <div class="form-field"><label for="ecol-min-comments">最低评论数</label><input id="ecol-min-comments" type="number" min="0" value="${Number(initial.min_comments) || 0}"></div>
+        <div class="form-field"><label for="ecol-stagnant-pages">连续无新增停止</label><input id="ecol-stagnant-pages" type="number" min="1" max="8" value="${Number(initial.stagnant_pages) || 3}"></div>
+      </div>
       <div class="option-grid" aria-label="采集选项">
         <label class="switch-row"><input type="checkbox" id="ecol-download"${initial.download_media ? " checked" : ""} onchange="$('ecol-dir-wrap').style.display=this.checked?'':'none'"><span class="switch-copy"><b>下载媒体</b><span>保存视频和封面来源</span></span></label>
         <label class="switch-row"><input type="checkbox" id="ecol-replies"${initial.include_replies ? " checked" : ""}><span class="switch-copy"><b>包含二级评论</b><span>采集抖音当前可返回的回复</span></span></label>
@@ -3155,11 +4273,21 @@ async function editCollection(jobId, draft = null) {
       <div class="form-field" id="ecol-dir-wrap" style="display:${initial.download_media ? "" : "none"}"><label for="ecol-download-dir">下载目录（可选）</label><input id="ecol-download-dir" value="${esc(initial.download_dir)}" placeholder="留空使用默认目录"></div>`;
     $("ecol-account").value = String(initial.account_id || "");
     $("ecol-quality").value = initial.video_quality || "highest";
+    $("ecol-sort").value = initial.search_sort || "general";
+    $("ecol-publish-time").value = initial.publish_time || "all";
+    $("ecol-content-type").value = initial.content_type || "all";
     enhanceAllSelects($("ui-body")); csSyncAll();
     _uiGetVal = () => ({
       account_id: Number($("ecol-account").value || 0),
       keywords: $("ecol-keywords").value,
       max_contents_per_keyword: Number($("ecol-content-limit").value || 0),
+      max_pages_per_keyword: Number($("ecol-page-limit").value || 0),
+      stagnant_pages: Number($("ecol-stagnant-pages").value || 0),
+      search_sort: $("ecol-sort").value || "general",
+      publish_time: $("ecol-publish-time").value || "all",
+      content_type: $("ecol-content-type").value || "all",
+      min_likes: Number($("ecol-min-likes").value || 0),
+      min_comments: Number($("ecol-min-comments").value || 0),
       max_comments_per_content: Number($("ecol-comment-limit").value || 0),
       include_replies: $("ecol-replies").checked,
       download_media: $("ecol-download").checked,
@@ -3175,6 +4303,9 @@ async function editCollection(jobId, draft = null) {
   else if (keywords.length > 20) error = "单个任务最多 20 个关键词";
   else if (!value.account_id) error = "请选择一个可用抖音账号";
   else if (value.max_contents_per_keyword < 1 || value.max_contents_per_keyword > 100) error = "每词作品上限须为 1–100";
+  else if (value.max_pages_per_keyword < 1 || value.max_pages_per_keyword > 40) error = "每词采集深度须为 1–40 页";
+  else if (value.stagnant_pages < 1 || value.stagnant_pages > 8) error = "连续无新增停止阈值须为 1–8 页";
+  else if (value.min_likes < 0 || value.min_comments < 0) error = "点赞和评论门槛须为非负整数";
   else if (value.max_comments_per_content < 0 || value.max_comments_per_content > 200) error = "每作品评论上限须为 0–200";
   if (error) { toast(error, "err"); return editCollection(jobId, value); }
   try {
@@ -3403,6 +4534,14 @@ async function addMonitor() {
           video_quality: PLATFORM === "xhs" ? "" : $("t-quality").value,
           download_enabled: downloadMode !== "none",
           media_filter: downloadMode === "none" ? "all" : downloadMode,
+          max_scrolls: +$("t-max-scrolls").value,
+          max_items_per_scan: +$("t-max-items").value,
+          record_media_filter: $("t-record-media").value,
+          recent_days: Math.max(0, +$("t-recent-days").value || 0),
+          min_like_count: Math.max(0, +$("t-min-likes").value || 0),
+          min_comment_count: Math.max(0, +$("t-min-comments").value || 0),
+          include_keywords: parseDanmakuKeywords($("t-include-keywords").value),
+          exclude_keywords: parseDanmakuKeywords($("t-exclude-keywords").value),
           alias: $("t-alias").value.trim(), group_name: getMetaValue("t-group").trim(),
           tags: parseTags(getMetaValue("t-tags")),
         }),
@@ -3436,6 +4575,14 @@ async function editMonitor(id) {
   const backfillOptions = numericSelectOptions(item.initial_backfill_count ?? 0, [
     [0, "不回填历史"], [5, "最近 5 条"], [20, "最近 20 条"], [-1, "尽可能全量"],
   ], " 条");
+  const depthOptions = numericSelectOptions(item.max_scrolls ?? 0, [
+    [0, "平台默认"], [3, "3 次下滑"], [6, "6 次下滑"],
+    [12, "12 次下滑"], [20, "20 次下滑"], [30, "30 次下滑"],
+  ]);
+  const itemLimitOptions = numericSelectOptions(item.max_items_per_scan ?? 0, [
+    [0, "平台默认"], [5, "5 条"], [12, "12 条"], [20, "20 条"],
+    [50, "50 条"], [100, "100 条"],
+  ]);
   const value = await new Promise(res => {
     _uiResolve = res; _uiCancelVal = null;
     _uiGetVal = () => {
@@ -3450,6 +4597,14 @@ async function editMonitor(id) {
         video_quality: $("em-quality") ? $("em-quality").value : "",
         download_enabled: downloadMode !== "none",
         media_filter: downloadMode === "none" ? "all" : downloadMode,
+        max_scrolls: +$("em-max-scrolls").value,
+        max_items_per_scan: +$("em-max-items").value,
+        record_media_filter: $("em-record-media").value,
+        recent_days: Math.max(0, +$("em-recent-days").value || 0),
+        min_like_count: Math.max(0, +$("em-min-likes").value || 0),
+        min_comment_count: Math.max(0, +$("em-min-comments").value || 0),
+        include_keywords: parseDanmakuKeywords($("em-include-keywords").value),
+        exclude_keywords: parseDanmakuKeywords($("em-exclude-keywords").value),
       };
       if ($("em-backfill")) result.initial_backfill_count = +$("em-backfill").value;
       return result;
@@ -3473,6 +4628,19 @@ async function editMonitor(id) {
         </div>
         ${item.last_scan_at ? "" : `<div><label class="field" for="em-backfill">首次历史回填</label>
           <select id="em-backfill">${backfillOptions}</select></div>`}
+        <div class="form-grid cols-4">
+          <div><label class="field" for="em-max-scrolls">抓取深度</label><select id="em-max-scrolls">${depthOptions}</select></div>
+          <div><label class="field" for="em-max-items">每轮作品上限</label><select id="em-max-items">${itemLimitOptions}</select></div>
+          <div><label class="field" for="em-record-media">作品类型</label><select id="em-record-media"><option value="all">全部入库</option><option value="video">仅视频</option><option value="images">仅图文/图集</option></select></div>
+          <div><label class="field" for="em-recent-days">发布时间范围</label><input id="em-recent-days" type="number" min="0" max="3650" inputmode="numeric"><div class="field-help">最近 N 天；0 表示不限</div></div>
+        </div>
+        <div class="form-grid cols-4">
+          <div><label class="field" for="em-min-likes">最低点赞数</label><input id="em-min-likes" type="number" min="0" max="1000000000" inputmode="numeric"></div>
+          <div><label class="field" for="em-min-comments">最低评论数</label><input id="em-min-comments" type="number" min="0" max="1000000000" inputmode="numeric"></div>
+          <div><label class="field" for="em-include-keywords">必须包含</label><input id="em-include-keywords" maxlength="320" placeholder="多个词用逗号分隔"></div>
+          <div><label class="field" for="em-exclude-keywords">排除关键词</label><input id="em-exclude-keywords" maxlength="320" placeholder="多个词用逗号分隔"></div>
+        </div>
+        <div class="field-help">筛选决定是否入库；抓取深度越高，单轮耗时和账号访问频率越高。</div>
       </fieldset>
       <fieldset class="monitor-config-group">
         <legend>记录与下载</legend>
@@ -3492,7 +4660,16 @@ async function editMonitor(id) {
     if ($("em-backfill")) $("em-backfill").value = String(item.initial_backfill_count ?? 0);
     if ($("em-quality")) $("em-quality").value = item.video_quality || "";
     $("em-download").value = item.download_enabled === false ? "none" : (item.media_filter || "all");
-    ["em-interval", "em-account", "em-backfill", "em-quality", "em-download"]
+    $("em-max-scrolls").value = String(item.max_scrolls ?? 0);
+    $("em-max-items").value = String(item.max_items_per_scan ?? 0);
+    $("em-record-media").value = item.record_media_filter || "all";
+    $("em-recent-days").value = String(item.recent_days || 0);
+    $("em-min-likes").value = String(item.min_like_count || 0);
+    $("em-min-comments").value = String(item.min_comment_count || 0);
+    $("em-include-keywords").value = (item.include_keywords || []).join(", ");
+    $("em-exclude-keywords").value = (item.exclude_keywords || []).join(", ");
+    ["em-interval", "em-account", "em-backfill", "em-quality", "em-download",
+      "em-max-scrolls", "em-max-items", "em-record-media"]
       .forEach(key => { const el = $(key); if (el) enhanceSelect(el); });
     _uiOpen("编辑作品监控", "监控对象不可修改；需要更换主页、创作者或关键词时，请新建监控。", { okText: "保存修改", wide: true });
   });
@@ -3504,6 +4681,19 @@ async function editMonitor(id) {
     });
     toast("作品监控配置已更新", "ok"); refreshMonitors(); refreshContents();
   } catch (e) { toast("更新失败:" + e.message, "err"); }
+}
+function monitorStrategySummary(t) {
+  const depth = t.max_scrolls || (t.platform === "xhs" ? 6 : 12);
+  const limit = t.max_items_per_scan || (t.platform === "xhs" ? 12 : 0);
+  const filters = [];
+  if (t.record_media_filter && t.record_media_filter !== "all") filters.push(t.record_media_filter === "video" ? "视频" : "图文");
+  if (t.recent_days) filters.push(`${t.recent_days}天内`);
+  if (t.min_like_count) filters.push(`赞≥${fmtNum(t.min_like_count)}`);
+  if (t.min_comment_count) filters.push(`评≥${fmtNum(t.min_comment_count)}`);
+  if ((t.include_keywords || []).length) filters.push(`含 ${t.include_keywords.join("/")}`);
+  if ((t.exclude_keywords || []).length) filters.push(`排除 ${t.exclude_keywords.join("/")}`);
+  const filterLabel = filters.length ? filters.join(" · ") : "无入库筛选";
+  return `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px" title="${esc(filterLabel)}"><span class="pill q bare">深度 ${depth}</span><span class="pill q bare">上限 ${limit || "不限"}</span>${filters.length ? `<span class="pill q bare">${esc(filterLabel)}</span>` : ""}</div>`;
 }
 function monRow(t) {
   const label = t.target_kind === "keyword"
@@ -3522,6 +4712,7 @@ function monRow(t) {
     <td class="num">${Math.round(t.interval_seconds / 60)} 分</td>
     <td class="wrap" style="max-width:230px">
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px"><span class="pill q bare">${downloadLabel}</span></div>
+      ${monitorStrategySummary(t)}
       ${t.platform === "xhs" ? "" : `<span class="pill q bare">${QMAP[t.video_quality] || "默认画质"}</span> `}
       <span class="mut" title="${esc(t.download_dir || "默认目录")}" style="display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${esc(t.download_dir || "默认")}</span></td>
     <td class="mut">${t.last_scan_at ? new Date(t.last_scan_at + "Z").toLocaleString() : "—"}${t.last_error ? ` <span class="warn-ic" title="${esc(t.last_error)}">${ic("i-info")}</span>` : ""}</td>
@@ -3561,7 +4752,7 @@ async function runNow(id) {
     try {
       const r = await api("/api/monitors/" + id + "/run-now", { method: "POST" });
       if (r.error) toast("抓取未成功:" + r.error, "err", 6000);
-      else toast(`抓取完成,新增 ${r.new} 条`, "ok");
+      else toast(`抓取完成,检查 ${r.scanned ?? r.new} 条，筛除 ${r.filtered || 0} 条，新增 ${r.new} 条`, "ok");
     } catch (e) { toast("抓取失败:" + e.message, "err"); }
   });
   refreshMonitors(); refreshContents();
@@ -3643,8 +4834,9 @@ function updateContentSelBar() {
   $("content-selbar").style.display = n ? "inline-flex" : "none";
   const ids = [...document.querySelectorAll(CONTENT_CBS)].map(cb => +cb.dataset.id).filter(Boolean);
   const allSel = ids.length > 0 && ids.every(id => selContent.has(id));
+  const selectedOnPage = ids.filter(id => selContent.has(id)).length;
   const btn = $("content-selall-btn"); if (btn) btn.textContent = allSel ? "取消全选" : "全选";
-  const sa = $("content-selall"); if (sa) sa.checked = allSel;
+  const sa = $("content-selall"); if (sa) { sa.checked = allSel; sa.indeterminate = selectedOnPage > 0 && !allSel; }
 }
 async function contentBatchDelete() {
   if (!selContent.size) return;
@@ -3666,8 +4858,9 @@ function updateCommentSelBar() {
   c.textContent = "已选 " + n; c.style.display = n ? "inline" : "none"; b.style.display = n ? "inline-flex" : "none";
   const ids = [...document.querySelectorAll(COMMENT_CBS)].map(cb => +cb.dataset.id).filter(Boolean);
   const allSel = ids.length > 0 && ids.every(id => selComment.has(id));
+  const selectedOnPage = ids.filter(id => selComment.has(id)).length;
   const btn = $("comment-selall-btn"); if (btn) btn.textContent = allSel ? "取消全选" : "全选";
-  const sa = $("comment-selall"); if (sa) sa.checked = allSel;
+  const sa = $("comment-selall"); if (sa) { sa.checked = allSel; sa.indeterminate = selectedOnPage > 0 && !allSel; }
 }
 async function commentBatchDelete() {
   if (!selComment.size) return;
@@ -3828,10 +5021,15 @@ async function refreshContents(resetPage = false) {
   updateContentSelBar(); renderContentPager(meta);
 }
 async function retryDl(id) {
-  const btn = event.target.closest("button"); btn.disabled = true; btn.textContent = "重试中…";
-  try { await api("/api/contents/" + id + "/retry-download", { method: "POST" }); toast("已重新加入下载队列", "ok"); }
-  catch (e) { toast("重试失败:" + e.message, "err"); }
-  setTimeout(() => refreshContents(), 1200);
+  const btn = evtBtn();
+  await withBusy(btn, "重试中", async () => {
+    try {
+      const result = await api("/api/contents/" + id + "/retry-download", { method: "POST" });
+      if (!result.ok) throw new Error(result.error || "下载未完成");
+      toast("重试成功，作品已下载", "ok");
+    } catch (e) { toast("重试失败:" + e.message, "err", 7000); }
+  });
+  await refreshContents();
 }
 async function delContent(id) {
   if (!await uiConfirm({ title: "删除作品", message: "删除这条作品记录及其已下载的本地文件?", okText: "删除", danger: true })) return;
@@ -4460,7 +5658,7 @@ async function refreshComments(resetPage = false) {
     return `<tr>
     <td><input type="checkbox" data-id="${r.id}" onchange="commentToggleOne(${r.id}, this.checked)" ${selComment.has(r.id) ? "checked" : ""}></td>
     <td class="wrap" style="max-width:360px">${r.is_reply ? '<span class="mut">↳</span> ' : ""}${esc(r.text || "").slice(0, 60)}${src}</td>
-    <td class="mut">${esc(r.user_nickname || "")}</td>
+    <td class="mut comment-user"><div>${esc(r.user_nickname || "")}</div>${r.user_sec_uid ? `<div class="comment-user-sec" title="${esc(r.user_sec_uid)}">sec_uid: ${esc(r.user_sec_uid)}</div>` : ""}</td>
     <td class="mut num">${fmtNum(r.like_count)}</td>
     <td class="mut num">${fmtTime(r.create_time)}</td>
     <td class="acttd"><button class="ghost sm danger" onclick="delComment(${r.id})">${ic("i-trash")}删除</button></td>
@@ -5293,12 +6491,183 @@ async function delTask(id) {
   catch (e) { toast("删除失败:" + e.message, "err"); }
 }
 
+// ─── 统一任务队列 ───
+let TASK_QUEUE_PAGE = 1;
+let TASK_QUEUE_PAGE_SIZE = 20;
+let TASK_QUEUE_PAGES = 1;
+let TASK_QUEUE_LOADING = false;
+let TASK_QUEUE_REFRESH_PENDING = false;
+let TASK_QUEUE_BADGE_LOADING = false;
+
+const TASK_QUEUE_RAW_STATUS = {
+  draft: "草稿待审", pending: "等待执行", running: "采集中", publishing: "发布中",
+  doing: "执行中", downloading: "下载中", done: "已完成", failed: "失败",
+  partial: "部分完成", uncertain: "结果待确认", canceled: "已取消", skipped: "已跳过",
+};
+const TASK_QUEUE_STATE_META = {
+  pending: ["等待执行", "pending"], running: ["正在执行", "queue-running"],
+  blocked: ["风控延后", "queue-blocked"], failed: ["执行失败", "failed"],
+  completed: ["已完成", "queue-completed"],
+};
+
+function updateTaskQueuePlatformLabel() {
+  const option = $("queue-platform-current");
+  if (option) option.textContent = `当前平台（${PF_NAME[PLATFORM] || PLATFORM}）`;
+  const select = $("queue-platform");
+  if (select && select._csSync) select._csSync();
+}
+
+function taskQueuePlatform() {
+  const value = $("queue-platform")?.value || "current";
+  return value === "current" ? PLATFORM : value;
+}
+
+function taskQueueDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function taskQueueSourceLabel(tab) {
+  return ({
+    collections: "采集任务", publish: "发布任务", autocomment: "评论任务",
+    hub: "账号管理", monitors: "作品监控",
+  })[tab] || "查看";
+}
+
+function taskQueueRow(item) {
+  const stateMeta = TASK_QUEUE_STATE_META[item.state] || [item.state || "未知", "skipped"];
+  const rawStatus = TASK_QUEUE_RAW_STATUS[item.status] || item.status || "未知";
+  const account = item.account_name || (item.account_id ? `账号 #${item.account_id}` : "未绑定账号");
+  const scheduled = item.scheduled_at ? `<b>计划 ${taskQueueDate(item.scheduled_at)}</b>` : "";
+  const created = item.created_at ? `<small>创建 ${taskQueueDate(item.created_at)}</small>` : "";
+  const nextAllowed = item.next_allowed_at ? `<small>最早继续：${taskQueueDate(item.next_allowed_at)}</small>` : "";
+  const reason = item.blocked_reason || item.error || "—";
+  const reasonClass = item.error && !item.blocked_reason ? " has-error" : "";
+  const signal = item.blocked_signal ? `<small>信号：${esc(item.blocked_signal)}</small>` : "";
+  return `<tr>
+    <td><span class="pill q bare">${esc(item.queue_label)}</span><small class="mut" style="display:block;margin-top:5px">${esc(PF_NAME[item.platform] || item.platform || "—")}</small></td>
+    <td><div class="queue-copy"><b title="${esc(item.title)}">${esc(item.title)}</b>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</div></td>
+    <td><div class="queue-account"><b>${esc(account)}</b>${item.account_id ? `<small>ID ${Number(item.account_id)}</small>` : ""}</div></td>
+    <td><div class="queue-time">${scheduled || "尽快执行"}${created}</div></td>
+    <td><span class="pill ${stateMeta[1]}">${esc(stateMeta[0])}</span><small class="mut" style="display:block;margin-top:5px">${esc(rawStatus)}</small></td>
+    <td><div class="queue-reason${reasonClass}">${esc(reason)}${signal}${nextAllowed}</div></td>
+    <td class="acttd"><button type="button" class="ghost sm" onclick="openTaskQueueSource('${esc(item.source_tab)}')">${esc(taskQueueSourceLabel(item.source_tab))}</button></td>
+  </tr>`;
+}
+
+function renderTaskQueuePager(data) {
+  const pager = $("queue-pager");
+  if (!pager) return;
+  TASK_QUEUE_PAGE = Math.max(1, Number(data.page || 1));
+  TASK_QUEUE_PAGE_SIZE = Math.max(1, Number(data.page_size || TASK_QUEUE_PAGE_SIZE));
+  TASK_QUEUE_PAGES = Math.max(1, Number(data.pages || 1));
+  $("queue-page-info").textContent = `第 ${TASK_QUEUE_PAGE} / ${TASK_QUEUE_PAGES} 页 · 共 ${fmtNum(data.total || 0)} 条`;
+  $("queue-first").disabled = TASK_QUEUE_PAGE <= 1;
+  $("queue-prev").disabled = TASK_QUEUE_PAGE <= 1;
+  $("queue-next").disabled = TASK_QUEUE_PAGE >= TASK_QUEUE_PAGES;
+  $("queue-last").disabled = TASK_QUEUE_PAGE >= TASK_QUEUE_PAGES;
+  if ($("queue-page-size")) $("queue-page-size").value = String(TASK_QUEUE_PAGE_SIZE);
+  pager.hidden = false;
+}
+
+function renderTaskQueueSummary(summary = {}) {
+  ["active", "pending", "running", "blocked", "failed"].forEach(name => {
+    const el = $(`queue-stat-${name}`);
+    if (el) el.textContent = fmtNum(Number(summary[name] || 0));
+  });
+  const badge = $("tb-queue");
+  if (badge) badge.textContent = fmtNum(Number(summary.active || 0));
+  const selected = $("queue-state")?.value || "active";
+  document.querySelectorAll("[data-queue-state]").forEach(button =>
+    button.classList.toggle("active", button.dataset.queueState === selected));
+}
+
+async function refreshTaskQueue(resetPage = false) {
+  const body = $("queue-table");
+  if (resetPage) TASK_QUEUE_PAGE = 1;
+  if (!body) return;
+  if (TASK_QUEUE_LOADING) { TASK_QUEUE_REFRESH_PENDING = true; return; }
+  TASK_QUEUE_LOADING = true;
+  $("queue-table-wrap")?.classList.add("stale");
+  const params = new URLSearchParams({
+    platform: taskQueuePlatform(),
+    queue_type: $("queue-type")?.value || "",
+    state: $("queue-state")?.value || "active",
+    q: $("queue-query")?.value.trim() || "",
+    page: String(TASK_QUEUE_PAGE),
+    page_size: String(TASK_QUEUE_PAGE_SIZE),
+  });
+  try {
+    const data = await api("/api/task-queue?" + params.toString());
+    body.innerHTML = data.items?.length
+      ? data.items.map(taskQueueRow).join("")
+      : empty(7, "当前筛选范围内没有任务", "i-inbox", "切换状态或平台范围后再查看");
+    renderTaskQueueSummary(data.summary || {});
+    renderTaskQueuePager(data);
+  } catch (e) {
+    body.innerHTML = empty(7, "任务队列加载失败", "i-info", e.message || "请稍后重试");
+    if (CURRENT_TAB === "queue") toast("任务队列加载失败：" + e.message, "err");
+  } finally {
+    TASK_QUEUE_LOADING = false;
+    $("queue-table-wrap")?.classList.remove("stale");
+    if (TASK_QUEUE_REFRESH_PENDING) {
+      TASK_QUEUE_REFRESH_PENDING = false;
+      setTimeout(() => refreshTaskQueue(), 0);
+    }
+  }
+}
+
+async function refreshTaskQueueBadge() {
+  if (TASK_QUEUE_BADGE_LOADING || CURRENT_TAB === "queue") return;
+  TASK_QUEUE_BADGE_LOADING = true;
+  try {
+    const params = new URLSearchParams({ platform: PLATFORM, state: "active", page_size: "1" });
+    const data = await api("/api/task-queue?" + params.toString());
+    const badge = $("tb-queue");
+    if (badge) badge.textContent = fmtNum(Number(data.summary?.active || 0));
+  } catch (e) {
+    // 导航徽章是辅助信息，失败时保留上次值，不打断当前页面操作。
+  } finally { TASK_QUEUE_BADGE_LOADING = false; }
+}
+
+function setTaskQueueState(state) {
+  const select = $("queue-state");
+  if (!select) return;
+  select.value = state;
+  if (select._csSync) select._csSync();
+  refreshTaskQueue(true);
+}
+
+function goTaskQueuePage(page) {
+  const target = Math.max(1, Math.min(TASK_QUEUE_PAGES, Number(page) || 1));
+  if (target === TASK_QUEUE_PAGE) return;
+  TASK_QUEUE_PAGE = target;
+  refreshTaskQueue();
+}
+
+function setTaskQueuePageSize(value) {
+  TASK_QUEUE_PAGE_SIZE = Math.max(10, Math.min(100, Number(value) || 20));
+  refreshTaskQueue(true);
+}
+
+function openTaskQueueSource(tab) {
+  if (!PAGE_META[tab]) return;
+  switchTab(tab, true);
+}
+
 function esc(s) { return (s || "").toString().replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 function loop() {
   if (INFLIGHT > 0 || document.hidden) return;   // 慢操作/后台标签页不刷新,减少干扰与无效请求
   refreshMonitors(); refreshContents(); refreshWatches(); refreshComments(); refreshDanmakuWatches(); refreshDanmaku(); refreshOverviewChart(); refreshCommentRules(); refreshCommentTasks(); if (pfHasPublish(PLATFORM)) refreshPublish();
   if (CURRENT_TAB === "collections") refreshCollections();
+  if (CURRENT_TAB === "risk-control") refreshRiskCenter();
+  if (CURRENT_TAB === "queue") refreshTaskQueue(); else refreshTaskQueueBadge();
 }
 
 // initial skeletons while data loads
@@ -5311,9 +6680,10 @@ $("danmaku-watch-table").innerHTML = skeleton(8);
 $("danmaku-table").innerHTML = skeleton(6);
 $("collection-job-table").innerHTML = collectionTaskSkeleton(3);
 $("collection-content-list").innerHTML = collectionResultSkeleton(4);
+$("queue-table").innerHTML = skeleton(7);
 
 // restore last-selected section (default: 总览);旧版四个独立页已并入「账号管理」
-const VALID_TABS = ["overview", "accounts", "collections", "monitors", "comments", "danmaku", "hub", "publish", "autocomment", "share-download", "notifications", "settings"];
+const VALID_TABS = ["overview", "accounts", "risk-control", "queue", "collections", "monitors", "comments", "danmaku", "hub", "publish", "autocomment", "share-download", "notifications", "settings"];
 const LEGACY_HUB_TABS = ["myworks", "following", "fans", "dm"];
 switchTab((() => {
   try {
@@ -5329,11 +6699,21 @@ switchHubTab(HUB_TAB);   // 恢复上次停留的子标签(我的作品/关注/�
 // restore last-selected platform (default: 抖音)
 PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
 applyPlatformUI();
+updateTaskQueuePlatformLabel();
 
-onTypeChange(); bindPubFilePicker(); onPubType(); populateWatchAccount(); applyDanmakuForm(); onAcMode(); loadSettings(); refreshAccounts(); refreshProxies(); refreshChannels(); loop();
+onTypeChange(); bindPubFilePicker(); onPubType(); populateWatchAccount(); applyDanmakuForm(); onAcMode(); loadSettings(); refreshAccounts(); refreshBrowserRuntimes(); refreshProxies(); refreshChannels(); loop();
 enhanceAllSelects();   // 把所有原生 <select> 升级为美化下拉
 enhanceAllMetaControls(); // 分组/标签：当前平台词库下拉，可搜索并新增
 enhanceAllDateTime();  // 把 datetime-local 升级为自定义日期选择器
+// 编辑弹窗和异步列表会动态插入控件；统一做渐进增强，避免新旧样式混用。
+const controlEnhancer = new MutationObserver(records => {
+  records.forEach(record => record.addedNodes.forEach(node => {
+    if (node.nodeType !== 1) return;
+    enhanceAllSelects(node);
+    enhanceAllDateTime(node);
+  }));
+});
+controlEnhancer.observe(document.body, { childList: true, subtree: true });
 
 // shell 交互：浏览器前进/后退、平台键盘切换、长页面返回顶部。
 window.addEventListener("hashchange", () => {

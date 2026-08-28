@@ -132,6 +132,13 @@ def classify_platform_error(
         return RiskCategory.NETWORK, "network_failure"
 
     text = str(error or "").strip().lower()
+    # Browser interception failures used to include a list of possible causes,
+    # for example "可能未登录/被风控/无结果".  Those messages are diagnostic
+    # guesses, not evidence of an expired session.  Classifying them by a
+    # substring such as "未登录" incorrectly invalidates a healthy account.
+    if "未拦截到" in text and any(marker in text for marker in (
+            "可能未登录", "或未登录", "未登录/")):
+        return RiskCategory.BUSINESS, "ambiguous_browser_result"
     auth_markers = (
         "登录态已失效", "登录已失效", "未登录", "logged_out", "login expired",
         "session expired", "cookie expired",
@@ -183,6 +190,15 @@ class RiskController:
         self._decision_lock = threading.RLock()
         self._network_locks: dict[str, asyncio.Semaphore] = {}
         self._network_lock_guard = threading.Lock()
+
+    def update_policy(self, policy) -> None:
+        """Apply a saved policy to subsequent decisions without restarting."""
+        self.policy = policy
+        # Semaphores encode the configured capacity at construction time.
+        # Existing holders keep their own reference and release normally;
+        # newly scheduled work receives semaphores with the new capacity.
+        with self._network_lock_guard:
+            self._network_locks.clear()
 
     @staticmethod
     def _account_id(account_or_id: DouyinAccount | int | None) -> int | None:
@@ -436,6 +452,7 @@ class RiskController:
         kind: OperationKind,
         *,
         now: datetime | None = None,
+        allow_invalid_probe: bool = False,
     ) -> RiskDecision:
         if not self.policy.enabled:
             return RiskDecision(True)
@@ -449,11 +466,31 @@ class RiskController:
             if account is None:
                 return RiskDecision(False, "账号不存在", signal="account_missing")
             if account.status == "invalid" and kind != OperationKind.LOGIN:
-                return RiskDecision(
-                    False,
-                    "账号登录态已失效，等待重新登录",
-                    signal="auth_required",
-                )
+                if not allow_invalid_probe:
+                    return RiskDecision(
+                        False,
+                        "账号登录态已失效，等待重新登录",
+                        signal="auth_required",
+                    )
+                # A manual profile refresh is the recovery probe for accounts
+                # that were marked invalid by an inconclusive login check.
+                # A real auth failure still gets a 15-minute retry gap.
+                latest_auth = session.exec(
+                    select(RiskEvent)
+                    .where(RiskEvent.account_id == account_id)
+                    .where(RiskEvent.outcome == RiskCategory.AUTH.value)
+                    .order_by(RiskEvent.occurred_at.desc())
+                    .limit(1)
+                ).first()
+                if latest_auth is not None:
+                    next_at = latest_auth.occurred_at + timedelta(minutes=15)
+                    if next_at > now:
+                        return RiskDecision(
+                            False,
+                            "登录态校验失败后需等待再探测",
+                            next_at,
+                            "auth_probe_gap",
+                        )
             if account.proxy and account.proxy_status in {
                     "bad", "auth_error", "blocked", "drifted"} \
                     and kind != OperationKind.LOGIN:
@@ -683,6 +720,7 @@ class RiskController:
                 operation_kind=kind.value,
                 outcome=category.value,
                 signal=signal,
+                detail=str(error or signal).strip()[:240],
                 occurred_at=now,
             )
             session.add(event)
@@ -698,7 +736,8 @@ class RiskController:
             session.commit()
         return FailureDecision(category, signal, next_at)
 
-    def clear_account(self, account_id: int) -> None:
+    def clear_account(self, account_id: int, *, reason: str = "人工检查完成",
+                      actor: str = "local-ui") -> None:
         with self._decision_lock, get_session() as session:
             state = session.get(AccountRiskState, account_id)
             if state:
@@ -718,6 +757,15 @@ class RiskController:
                 account.write_paused_until = None
                 account.write_pause_reason = ""
                 session.add(account)
+            session.add(RiskEvent(
+                account_id=account_id,
+                network_key=network_key(account.proxy) if account else "direct",
+                operation_kind=OperationKind.READ_LIGHT.value,
+                outcome="manual",
+                signal="risk_cleared",
+                detail=(f"{actor} 解除账号风控状态：{reason}".strip())[:240],
+                occurred_at=_utcnow(),
+            ))
             session.commit()
 
     def next_write_at(self, account_id: int) -> datetime | None:
